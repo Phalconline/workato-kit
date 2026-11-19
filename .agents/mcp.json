@@ -1,0 +1,22 @@
+{
+  "description": "MCP servers of this repository. scripts/sync_harness.py writes each harness's config file from this list. {app_url} is replaced with the web app address of the workspace (registry.json), or with the US data center's while there is no workspace. A server marked optional is written only when the workspace switches it on in its harness.json. The skills an optional server names are copied for Claude Code only while it is switched on. A server is left out for a workspace whose app address is in its unavailable_at list. Every person approves the servers in their own harness and signs in with their own account; no credentials are stored here.",
+  "servers": {
+    "workato-airo-mcp-server": {
+      "url": "{app_url}/airo_mcp",
+      "about": "Workato builder MCP: recipes, jobs, folders, connections, data tables. It acts in the environment that is active in the browser when you authorize it, so switch to Dev first. Workato does not offer it in the China data center.",
+      "unavailable_at": [
+        "https://app.workatoapp.cn"
+      ]
+    },
+    "atlassian": {
+      "url": "https://mcp.atlassian.com/v2/mcp",
+      "optional": true,
+      "about": "Jira and Confluence, with your own Atlassian permissions. Optional: switch it on in harness.json when the team uses Atlassian.",
+      "skills": [
+        "confluence-recipe-pages",
+        "search-company-knowledge",
+        "triage-issue"
+      ]
+    }
+  }
+}

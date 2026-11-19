@@ -1,0 +1,30 @@
+{
+  "description": "The files scripts/sync_harness.py generated here. It removes only a file that this list names. Never edit the list by hand.",
+  "files": [
+    ".agents/generated-files.json",
+    ".agents/mcp_config.json",
+    ".claude/agents/architect.md",
+    ".claude/agents/log-analyst.md",
+    ".claude/agents/task-worker.md",
+    ".claude/agents/workato-operator.md",
+    ".claude/settings.json",
+    ".claude/skills/change-impact-review/SKILL.md",
+    ".claude/skills/connector-development/SKILL.md",
+    ".claude/skills/environment-preflight/SKILL.md",
+    ".claude/skills/recipe-docs/SKILL.md",
+    ".claude/skills/workato-assets/SKILL.md",
+    ".claude/skills/workato-job-history/SKILL.md",
+    ".claude/skills/workato-prod-deploy/SKILL.md",
+    ".claude/skills/workato-recipe-edit/SKILL.md",
+    ".claude/skills/workato-recipe-json/SKILL.md",
+    ".claude/skills/workato-start-stop/SKILL.md",
+    ".codex/agents/architect.toml",
+    ".codex/agents/log-analyst.toml",
+    ".codex/agents/task-worker.toml",
+    ".codex/agents/workato-operator.toml",
+    ".codex/config.toml",
+    ".cursor/mcp.json",
+    ".gemini/settings.json",
+    ".mcp.json"
+  ]
+}

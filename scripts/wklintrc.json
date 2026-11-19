@@ -1,0 +1,16 @@
+{
+  "profile": "standard",
+  "rules": {
+    "UUID_DESCRIPTIVE": "off",
+    "EIS_NAME_MATCH": "off",
+    "EIS_MIRRORS_INPUT": "off",
+    "FILENAME_MATCH": "off",
+    "TRY_NO_AS": "off",
+    "DP_FORMULA_CONCAT": "off",
+    "DP_INTERPOLATION_SINGLE": "off",
+    "DP_NO_OUTER_PARENS": "off",
+    "NO_ELSIF": "off",
+    "ALL_PATHS_RETURN": "off",
+    "ACTION_NAME_UNVERIFIED": "off"
+  }
+}

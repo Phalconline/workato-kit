@@ -1,0 +1,38 @@
+{
+  "claude": {
+    "architect": {
+      "model": null,
+      "effort": "high"
+    },
+    "log-analyst": {
+      "model": null,
+      "effort": "high"
+    },
+    "task-worker": {
+      "model": "sonnet",
+      "effort": "medium"
+    },
+    "workato-operator": {
+      "model": "sonnet",
+      "effort": "medium"
+    }
+  },
+  "codex": {
+    "architect": {
+      "model": null,
+      "effort": "high"
+    },
+    "log-analyst": {
+      "model": null,
+      "effort": "high"
+    },
+    "task-worker": {
+      "model": null,
+      "effort": "medium"
+    },
+    "workato-operator": {
+      "model": null,
+      "effort": "medium"
+    }
+  }
+}

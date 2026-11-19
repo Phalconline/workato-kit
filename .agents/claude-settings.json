@@ -1,0 +1,94 @@
+{
+  "description": "Source of .claude/settings.json. scripts/sync_harness.py adds one allow rule for each read-only wk command below (without a profile, and with each of the two wk profiles of the registry) and the rules a workspace lists as claude_allow in its harness.json. Edit this file, never the generated one. Nothing here may allow a command that changes Workato, and no rule may end in a wildcard after a command whose arguments reach a shell (make, for example).",
+  "wk_read_commands": [
+    "recipes get",
+    "recipes list",
+    "recipes pull",
+    "recipes export",
+    "folders list",
+    "connections list",
+    "connections get",
+    "workspace info",
+    "workspace audit-log",
+    "auth status"
+  ],
+  "settings": {
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+      "allow": [
+        "mcp__workato-airo-mcp-server__docs_get",
+        "mcp__workato-airo-mcp-server__recipe_get",
+        "mcp__workato-airo-mcp-server__recipe_list",
+        "mcp__workato-airo-mcp-server__folder_list",
+        "mcp__workato-airo-mcp-server__project_list",
+        "mcp__workato-airo-mcp-server__job_list",
+        "mcp__workato-airo-mcp-server__job_get",
+        "mcp__workato-airo-mcp-server__project_privilege_get",
+        "mcp__workato-airo-mcp-server__recipe_builder_list_connections",
+        "Bash(wk auth list *)",
+        "Bash(wk lint *)",
+        "Bash(wk version *)",
+        "Bash(wk plugins list *)",
+        "Bash(wk recipes validate *)",
+        "Bash(scripts/sync_recipes.py *)",
+        "Bash(scripts/lint_recipes.py *)",
+        "Bash(scripts/prod_drift.py *)",
+        "Bash(scripts/prod_jobs_report.py *)",
+        "Bash(scripts/link_prod_ids.py *)",
+        "Bash(scripts/render_recipe.py *)",
+        "Bash(scripts/build_index.py *)",
+        "Bash(scripts/sync_lookup_tables.py *)",
+        "Bash(scripts/sync_harness.py --check)",
+        "Bash(scripts/check.py *)",
+        "Bash(scripts/check_data.py *)",
+        "Bash(scripts/check_kit_files.py *)",
+        "Bash(scripts/check_links.py *)",
+        "Bash(scripts/check_secrets.py *)",
+        "Bash(scripts/doctor.py *)",
+        "Bash(make check)",
+        "Bash(make test)",
+        "Bash(make lint)",
+        "Bash(make typecheck)",
+        "Bash(scripts/wk_api.py dev GET /deployments*)",
+        "Bash(scripts/wk_api.py dev GET /recipes*)",
+        "Bash(scripts/wk_api.py dev GET /connections*)",
+        "Bash(scripts/wk_api.py dev GET /folders*)",
+        "Bash(scripts/wk_api.py dev GET /activity_logs*)",
+        "Bash(scripts/wk_api.py prod GET /deployments*)",
+        "Bash(scripts/wk_api.py prod GET /recipes*)",
+        "Bash(scripts/wk_api.py prod GET /connections*)",
+        "Bash(scripts/wk_api.py prod GET /folders*)",
+        "Bash(scripts/wk_api.py prod GET /activity_logs*)"
+      ],
+      "deny": [
+        "Bash(wk pull *)",
+        "Bash(wk diff *)",
+        "Bash(wk clone *)",
+        "Bash(wk push *)",
+        "Bash(wk auth token *)",
+        "Bash(wk mcp auth-header *)",
+        "Read(/profiles.env)",
+        "Read(/.env)",
+        "Read(/.env.*)",
+        "Read(/.wk/**)",
+        "Read(/workato/workspaces/**/master.key)",
+        "Read(/workato/workspaces/**/settings.yaml)"
+      ]
+    },
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "command -v python3.14 >/dev/null 2>&1 || { echo 'wk guard: python3.14 is not on PATH. Install Python 3.14 and restart Claude Code (docs/setup/README.md).' >&2; exit 2; }; python3.14 -I \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/scripts/guard_wk.py\" || exit 2",
+              "timeout": 10,
+              "statusMessage": "Checking wk command"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

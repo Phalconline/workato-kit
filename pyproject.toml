@@ -1,0 +1,61 @@
+# Tool configuration only. This repository is not a package: there is no [project] table.
+# The scripts in scripts/ use the standard library only; the tools below are for development.
+# The standard they enforce is described in docs/conventions/python.md.
+
+[dependency-groups]
+dev = ["ruff==0.17.5", "mypy==2.4.1"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 99
+src = ["scripts", "."]
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F",   # pycodestyle, pyflakes
+  "I",             # import order
+  "N",             # naming
+  "D",             # docstrings
+  "UP",            # modern syntax
+  "B", "A", "ARG", "C4", "SIM", "RET", "PIE", "PERF", "FURB", "RUF", "BLE", "ISC",
+  "PTH",           # pathlib instead of os.path
+  "DTZ",           # timezone-aware datetimes
+  "PL",            # pylint
+  "EXE",           # shebang and executable bit agree
+  "S",             # security
+]
+ignore = [
+  "S603",          # flags every subprocess call; ours pass argument lists, never a shell string
+  "D105", "D107",  # a magic method or __init__ needs no docstring of its own
+  "W191", "E111", "E114", "E117", "D206", "D300",  # the formatter owns these
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]  # imports follow the sys.path line of the script header
+"tests/**" = ["D", "S", "ARG", "PLR2004", "PLR0913"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["scripts", "tests"]
+mypy_path = "scripts"
+explicit_package_bases = true
+strict = true
+warn_unreachable = true
+# Recipe JSON and API answers are untyped by nature: returning one of their values is not an error.
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false

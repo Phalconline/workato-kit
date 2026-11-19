@@ -1,0 +1,36 @@
+{
+  "roles": {
+    "architect": {
+      "description": "Research, planning, problem solving and architecture for the Workato workspace. Use when the question is how something should be designed or why something behaves the way it does - a new automation or project, a change that touches several recipes, a root-cause analysis, a comparison of approaches, a design record, a migration or cleanup plan. Use it before building, not for the building itself, and never for a write to Workato.",
+      "instructions_file": ".agents/roles/architect.md",
+      "skills": [
+        "change-impact-review"
+      ],
+      "color": "purple"
+    },
+    "log-analyst": {
+      "description": "Analysis of Workato job history and logs. Use to find out why jobs failed, what happened in Prod over a period, who calls a recipe, when a recipe last ran, or who stopped, started or edited something - and for any large volume of job, audit or lint output that should be read and summarized rather than pasted into the main conversation. Read-only: it never repeats a job or starts a recipe.",
+      "instructions_file": ".agents/roles/log-analyst.md",
+      "skills": [
+        "workato-job-history"
+      ],
+      "color": "green"
+    },
+    "task-worker": {
+      "description": "A well-scoped sub-task with a clear definition of done. Use to delegate one bounded piece of a larger job - write or update a recipe doc, edit a script, rebuild the index, check links, compare two files, or update a ticket or a wiki page when the workspace uses Atlassian. Not for Workato writes (those are made in the main conversation) and not for open design questions (use architect).",
+      "instructions_file": ".agents/roles/task-worker.md",
+      "skills": [
+        "recipe-docs"
+      ],
+      "color": "blue"
+    },
+    "workato-operator": {
+      "description": "Read-only Workato operations in this repository. Use for mechanical work that follows a written procedure - pulling recipe JSON, refreshing the Prod or Dev copy, running the lint and the Dev/Prod comparison, reading recipes, connections, tags and job lists. It never writes to Workato: edits, starts, stops, tags and deployments are made in the main conversation. Give it one recipe or one operation per call. Not for design decisions or open-ended investigation.",
+      "instructions_file": ".agents/roles/workato-operator.md",
+      "skills": [
+        "workato-recipe-json"
+      ],
+      "color": "orange"
+    }
+  }
+}

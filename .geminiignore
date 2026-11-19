@@ -1,0 +1,8 @@
+# Files that hold credentials: never shown to the AI.
+profiles.env
+.wk/
+.env
+.env.*
+# Connector SDK secrets
+master.key
+settings.yaml

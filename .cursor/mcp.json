@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "workato-airo-mcp-server": {
+      "url": "https://app.workato.com/airo_mcp"
+    }
+  }
+}

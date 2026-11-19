@@ -1,0 +1,31 @@
+# Personal working cache. Everything in tmp/ stays on your machine; only its README is shared.
+tmp/*
+!tmp/README.md
+
+# Personal harness settings
+.claude/settings.local.json
+CLAUDE.local.md
+
+# wk CLI project state and file-based credentials: never commit
+.wk/
+profiles.env
+
+# Connector SDK secrets: never commit
+master.key
+settings.yaml
+
+# Env files
+.env
+.env.*
+
+# Editors, OS, Python
+.idea/
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+
+# Development tools (make dev) and their caches
+.venv/
+.mypy_cache/
+.ruff_cache/
