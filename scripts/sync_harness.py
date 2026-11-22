@@ -371,7 +371,15 @@ def skill_files(root: Path, hidden: frozenset[str] = frozenset()) -> dict[str, b
                 f"{SKILLS_SOURCE}/{skill.name}: a skill folder is named with lower-case letters, "
                 "digits and dashes"
             )
-        text = (skill / "SKILL.md").read_text(encoding="utf-8")
+        if not (skill / "SKILL.md").is_file():
+            raise cli.Error(
+                f"{SKILLS_SOURCE}/{skill.name}: a skill folder needs a SKILL.md; add it or remove "
+                "the folder"
+            )
+        try:
+            text = (skill / "SKILL.md").read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            raise cli.Error(f"{SKILLS_SOURCE}/{skill.name}/SKILL.md is not UTF-8 text") from None
         head = text.split("\n---", 1)[0]
         name = SKILL_NAME.search(head)
         named = name is not None and name.group(1).strip("\"'") == skill.name

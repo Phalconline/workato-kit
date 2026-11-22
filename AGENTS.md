@@ -183,8 +183,8 @@ and only the offline checks work (`docs/setup/new-workspace.md`).
 ## Which skill to load
 
 Skills are in `.agents/skills/<name>/SKILL.md`. Load the one that matches before you act. Each
-skill points at `workato/workspaces/<workspace>/notes/<name>.md`: when that file exists, read it
-too. It holds what this workspace adds to the procedure.
+skill of the kit points at `workato/workspaces/<workspace>/notes/<name>.md`: when that file
+exists, read it too. It holds what this workspace adds to the procedure.
 
 | Task | Skill |
 |---|---|

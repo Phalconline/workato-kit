@@ -16,6 +16,26 @@ scripts/sync_harness.py
 make check
 ```
 
+## Unreleased: a skill of the workspace's own
+
+- **A skill of the workspace's own passes `make check`.** Such a skill failed two tests of
+  `tests/test_repository.py`, even when it was added as `docs/setup/skills.md` says. One test
+  wanted every skill in the kit's table "Which skill to load". The other wanted the notes line
+  in every skill. Now a `ws-<name>` skill must be named, in backticks, in the last section of
+  `AGENTS.md`, "Rules of this workspace", and only the kit's skills need the notes line.
+- **The checks around it.** `make check` also fails when that section names a `ws-<name>` skill
+  that has no folder, when the kit's table names a skill of the workspace's own, and when
+  `AGENTS.md` has lost the heading "Rules of this workspace".
+- **A skill folder without its file.** For a folder in `.agents/skills/` that holds no
+  `SKILL.md`, or one that is not UTF-8 text, `scripts/sync_harness.py` now stops with one line
+  that names the folder, instead of a traceback.
+
+### What a workspace repository must do
+
+Only if you listed a skill of your own in the table "Which skill to load" to get past the old
+check: name it in the last section of `AGENTS.md`, "Rules of this workspace", in backticks, and
+take your line out of the table. `make check` fails until both are done.
+
 ## Unreleased: after the first version
 
 What a workspace learned in its first weeks on these rules, brought back to the kit.

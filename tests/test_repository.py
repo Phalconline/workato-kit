@@ -5,6 +5,7 @@ import re
 import subprocess
 import unittest
 
+import check_kit_files
 from lib import wkrepo
 from tests import support
 
@@ -55,6 +56,10 @@ WORKSPACE_SCRIPTS = "scripts/ws_"
 HISTORICAL = ("docs/conventions/decisions.md", "changelog", "/design/")
 SKILLS = ROOT / ".agents" / "skills"
 SKILL_TABLE_HEADING = "## Which skill to load"
+# A workspace names the skills of its own in the last section of the rules, which it owns: a
+# line in the kit's table would conflict with the next update of the kit.
+WORKSPACE_RULES_HEADING = check_kit_files.WORKSPACE_SECTION
+WORKSPACE_SKILL = "ws-"
 BACKTICKED = re.compile(r"`([a-z][a-z0-9-]+)`")
 
 
@@ -73,6 +78,54 @@ def tracked_files():
 def skill_names():
     """Return the name of every skill of the repository."""
     return sorted(path.parent.name for path in SKILLS.glob("*/SKILL.md"))
+
+
+def kit_skills(names):
+    """Return the skills of the kit among the names: all but the workspace's own."""
+    return [name for name in names if not name.startswith(WORKSPACE_SKILL)]
+
+
+def section(rules, heading):
+    """Return one section of the rules, from its heading to the next one; empty without it."""
+    found = re.search(rf"^{re.escape(heading)}[ \t]*$", rules, re.MULTILINE)
+    return rules[found.end() :].split("\n## ", 1)[0] if found else ""
+
+
+def table_skills(rules):
+    """Return the skills that the rows of the table "Which skill to load" name."""
+    table = section(rules, SKILL_TABLE_HEADING)
+    rows = [line for line in table.split("\n") if line.startswith("| ") and "`" in line]
+    return {name for row in rows for name in BACKTICKED.findall(row.rsplit("|", 2)[-2])}
+
+
+def workspace_skills(rules):
+    """Return the skills of the workspace's own that the last section of the rules names."""
+    names = BACKTICKED.findall(section(rules, WORKSPACE_RULES_HEADING))
+    return {name for name in names if name.startswith(WORKSPACE_SKILL)}
+
+
+def unlisted_skills(rules, names):
+    """Return the skills that the rules do not name in the section where they belong.
+
+    A skill of the kit belongs in the section "Which skill to load". A skill of the workspace's
+    own belongs in the last section, "Rules of this workspace".
+    """
+    kit = set(BACKTICKED.findall(section(rules, SKILL_TABLE_HEADING)))
+    workspace = workspace_skills(rules)
+    return {
+        name
+        for name in names
+        if name not in (workspace if name.startswith(WORKSPACE_SKILL) else kit)
+    }
+
+
+def invented_rules(table_skill, workspace_skill):
+    """Return rules whose table names one skill and whose last section names another."""
+    return (
+        f"# Rules\n\n{SKILL_TABLE_HEADING}\n\n| Task | Skill |\n|---|---|\n"
+        f"| Do the task | `{table_skill}` |\n\n{WORKSPACE_RULES_HEADING}\n\n"
+        f"- **Order recipes.** Load `{workspace_skill}` before you change an order recipe.\n"
+    )
 
 
 class ClaudeSettingsTests(unittest.TestCase):
@@ -178,15 +231,72 @@ class NamingTests(unittest.TestCase):
 class SkillTests(unittest.TestCase):
     def test_the_rules_list_exactly_the_skills_that_exist(self):
         rules = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        section = rules.split(SKILL_TABLE_HEADING, 1)[1].split("\n## ", 1)[0]
-        named = set(BACKTICKED.findall(section))
-        self.assertEqual(set(skill_names()) - named, set(), "skills the rules do not list")
-        rows = [line for line in section.split("\n") if line.startswith("| ") and "`" in line]
-        listed = {name for row in rows for name in BACKTICKED.findall(row.rsplit("|", 2)[-2])}
-        self.assertEqual(listed - set(skill_names()), set(), "the rules list a missing skill")
+        names = set(skill_names())
+        self.assertEqual(
+            unlisted_skills(rules, names),
+            set(),
+            f"skills the rules do not name. One of the kit is named in the table under "
+            f"'{SKILL_TABLE_HEADING}'. One of the workspace's own is named as `ws-<name>`, in "
+            f"backticks, under '{WORKSPACE_RULES_HEADING}'",
+        )
+        self.assertEqual(table_skills(rules) - names, set(), "the table lists a missing skill")
+        self.assertEqual(
+            workspace_skills(rules) - names,
+            set(),
+            f"'{WORKSPACE_RULES_HEADING}' names a skill that has no folder in .agents/skills/",
+        )
 
-    def test_every_skill_points_at_the_notes_of_the_workspace(self):
-        for name in skill_names():
+    def test_the_table_of_the_kit_names_no_skill_of_the_workspace(self):
+        # The kit owns the table: a line of the workspace there conflicts with the next update.
+        rules = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertEqual(
+            {name for name in table_skills(rules) if name.startswith(WORKSPACE_SKILL)},
+            set(),
+            f"a skill of the workspace's own is named under '{WORKSPACE_RULES_HEADING}', not in "
+            "the table of the kit",
+        )
+
+    def test_the_rules_keep_the_section_of_the_workspace(self):
+        # Without its heading, no skill of the workspace's own can be listed.
+        rules = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertTrue(
+            WORKSPACE_RULES_HEADING in [line.rstrip() for line in rules.splitlines()],
+            f"AGENTS.md has no line '{WORKSPACE_RULES_HEADING}': its last section is gone",
+        )
+
+    def test_a_skill_of_the_workspace_named_in_the_last_section_passes(self):
+        rules = invented_rules("recipe-docs", "ws-orders")
+        self.assertEqual(unlisted_skills(rules, ["recipe-docs", "ws-orders"]), set())
+        self.assertEqual(table_skills(rules), {"recipe-docs"})
+        self.assertEqual(workspace_skills(rules), {"ws-orders"})
+
+    def test_a_skill_of_the_workspace_missing_from_the_last_section_is_reported(self):
+        rules = invented_rules("recipe-docs", "ws-orders")
+        names = ["recipe-docs", "ws-orders", "ws-returns"]
+        self.assertEqual(unlisted_skills(rules, names), {"ws-returns"})
+
+    def test_a_skill_named_only_in_the_other_section_is_reported(self):
+        rules = invented_rules("ws-orders", "recipe-docs")
+        names = ["recipe-docs", "ws-orders"]
+        self.assertEqual(unlisted_skills(rules, names), {"recipe-docs", "ws-orders"})
+        self.assertEqual(table_skills(rules), {"ws-orders"})
+        self.assertEqual(workspace_skills(rules), set())
+
+    def test_without_the_last_section_every_skill_of_the_workspace_is_reported(self):
+        rules = invented_rules("recipe-docs", "ws-orders").split(WORKSPACE_RULES_HEADING)[0]
+        self.assertEqual(unlisted_skills(rules, ["recipe-docs", "ws-orders"]), {"ws-orders"})
+
+    def test_a_heading_with_a_space_after_it_still_starts_its_section(self):
+        heading = WORKSPACE_RULES_HEADING
+        rules = invented_rules("recipe-docs", "ws-orders").replace(heading, f"{heading} ")
+        self.assertEqual(workspace_skills(rules), {"ws-orders"})
+
+    def test_a_skill_of_the_workspace_is_not_a_skill_of_the_kit(self):
+        self.assertEqual(kit_skills(["recipe-docs", "ws-orders"]), ["recipe-docs"])
+
+    def test_every_skill_of_the_kit_points_at_the_notes_of_the_workspace(self):
+        # A skill of the workspace's own is the workspace's text already: it has no notes file.
+        for name in kit_skills(skill_names()):
             with self.subTest(skill=name):
                 text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
                 self.assertIn(f"workato/workspaces/<workspace>/notes/{name}.md", text)

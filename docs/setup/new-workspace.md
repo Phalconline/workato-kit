@@ -340,7 +340,7 @@ update of the kit; your own files do not conflict with it.
 | notes about the platform as this workspace meets it | `docs/knowledge/workspace/` |
 | docs of a project and its recipes | `docs/<project-slug>/` ([docs/README.md](../README.md)) |
 | scripts of the workspace | `scripts/ws_<name>.py` and `scripts/lib/ws_<name>.py`, with tests in `tests/test_ws_<name>.py` (a test file of that name may also exist without a script) |
-| skills of the workspace | `.agents/skills/ws-<name>/SKILL.md`, listed in the last section of `AGENTS.md`, then `scripts/sync_harness.py` |
+| skills of the workspace | `.agents/skills/ws-<name>/SKILL.md`, listed by name, in backticks, in the last section of `AGENTS.md`, then `scripts/sync_harness.py` ([skills.md](skills.md#a-skill-of-the-workspaces-own)) |
 | CI workflows of the workspace | `.github/workflows/ws-<name>.yml` |
 
 There is no subagent role of the workspace's own: `.agents/agents.json` is one file, and the kit

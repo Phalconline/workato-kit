@@ -40,13 +40,21 @@ A procedure that only this workspace follows gets its own skill:
 .agents/skills/ws-<name>/SKILL.md
 ```
 
+`<name>` holds lower-case letters, digits and dashes. The file starts with a frontmatter that has
+a `name`, equal to the folder name, and a `description`.
+
 The kit never uses the `ws-` prefix, so an update of the kit never touches such a skill. List it
-in the last section of [AGENTS.md](../../AGENTS.md), "Rules of this workspace", with when to load
-it, then run:
+in the last section of [AGENTS.md](../../AGENTS.md), "Rules of this workspace": its name in
+backticks, such as `ws-orders`, and when to load it. Then run:
 
 ```bash
 scripts/sync_harness.py
 ```
+
+`make check` fails while a skill of the workspace's own is not named in that section, and while
+that section names one that does not exist. It also fails while the table "Which skill to load"
+names one: the kit owns that table. Such a skill needs no notes file (below): it is the
+workspace's own text already.
 
 A procedure every workspace could use belongs in the kit instead: propose it there
 ([updating.md](updating.md#send-an-improvement-back-to-the-kit)).

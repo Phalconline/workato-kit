@@ -275,7 +275,17 @@ class SyncTests(unittest.TestCase):
         self.assertNotIn("effort", keeper)  # not set: the session's effort is inherited
         self.assertEqual(harness.sync(repo, check=True), [])
 
+    def test_a_skill_folder_without_its_file_is_refused_by_name(self):
+        repo = make_repo(self)
+        (repo / ".agents/skills/example").mkdir()
+        with self.assertRaisesRegex(cli.Error, r"^\.agents/skills/example: .* needs a SKILL\.md"):
+            harness.sync(repo)
+
     def test_an_invalid_source_stops_the_run_before_the_first_write(self):
+        def not_utf8(repo):
+            add_skill(repo)
+            (repo / ".agents/skills/example/SKILL.md").write_bytes(b"---\nname: example\xff\n")
+
         cases = {
             "skill without a description": lambda repo: add_skill(
                 repo, frontmatter="name: example"
@@ -283,6 +293,10 @@ class SyncTests(unittest.TestCase):
             "skill named unlike its folder": lambda repo: add_skill(
                 repo, frontmatter="name: other\ndescription: x"
             ),
+            "skill folder without its SKILL.md": lambda repo: (
+                repo / ".agents/skills/example"
+            ).mkdir(),
+            "skill file that is not UTF-8 text": not_utf8,
             "role with an unknown skill": lambda repo: support.write_json(
                 repo / ".agents/agents.json",
                 {
