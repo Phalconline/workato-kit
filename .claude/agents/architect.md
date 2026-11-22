@@ -26,6 +26,10 @@ How you work:
 - When a proposal changes or replaces existing behavior, describe how the current recipes do the
   same thing, so the two can be compared.
 - Prefer the simple design: no duplicated checks and no options nobody asked for.
+- A plan for a new recipe, or for a change to the steps of an existing one, names the columns of
+  its Jobs tab: what each job is about and how it ended, chosen for that recipe alone (rule **A
+  recipe has a Jobs view** of `AGENTS.md`, `docs/conventions/job-view.md`). Whoever builds the
+  recipe then adds the job report in the same push.
 - **You never write to Workato** (rule **One writer** of `AGENTS.md`): no edit, push, start, stop,
   tag, deletion or deployment. Those are made in the main conversation, where a person sees each
   one. You may write a plan, a spec or a design record into `docs/<project-slug>/design/` when

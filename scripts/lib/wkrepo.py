@@ -38,6 +38,9 @@ US_API_HOST = "https://www.workato.com"
 US_APP_HOST = "https://app.workato.com"
 # Every data center and preview host of Workato is below one of these two domains.
 WORKATO_DOMAINS = (".workato.com", ".workatoapp.cn")
+# The first label of a data center's host as `wk` holds it: `www` for the US API, else `app`.
+APP_HOST_LABELS = ("www", "app")
+DATA_TABLES_LABEL = "data-tables"  # the first label of the host that serves the record API
 # A project slug is a folder name in three places, so it may hold nothing a path could abuse.
 SLUG = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 RESERVED_SLUGS = frozenset({"setup", "conventions", "knowledge", "kit"})  # folders of docs/
@@ -45,7 +48,7 @@ RESERVED_SLUGS = frozenset({"setup", "conventions", "knowledge", "kit"})  # fold
 PROFILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 DOMAIN = re.compile(r"[a-z0-9-]+(\.[a-z0-9-]+)+")
 # The house checks of scripts/lint_recipes.py that a project switches on with `lint_checks`.
-LINT_CHECKS = ("ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY")
+LINT_CHECKS = ("ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY", "JOB_VIEW")
 HTML_PAGE = re.compile(r"<!doctype|<html", re.IGNORECASE)
 ERROR_SHOWN = 400
 TIMEOUT = 60
@@ -225,6 +228,22 @@ def executable(name: str) -> str:
     return path
 
 
+def tracked_files() -> list[str]:
+    """Return every file git tracks or would track, relative to the repository root.
+
+    The offline checks read exactly these files. A folder that is no git repository, such as an
+    unpacked archive of the kit, has no such list: that is an expected error, not a crash.
+    """
+    command = [executable("git"), "ls-files", "-co", "--exclude-standard", "-z"]
+    done = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    if done.returncode != 0:
+        raise cli.Error(
+            "git cannot list the files of this folder: the checks need a git clone of the "
+            "repository, not an unpacked archive (docs/setup/new-workspace.md)"
+        )
+    return sorted(path for path in done.stdout.split("\0") if path)
+
+
 def run_wk(*args: str) -> str:
     """Run `wk <args>` from the repository root and return its output.
 
@@ -378,6 +397,23 @@ class Api:
 def api_url(prof: str) -> str:
     """Return the root of the developer API a profile reaches."""
     return base_url(prof) + "/api"
+
+
+def data_tables_api_url(prof: str) -> str:
+    """Return the root of the data tables record API in the data center of a profile.
+
+    Documented: the record API (query, create, update and delete rows) is served from a host of
+    its own, `data-tables` in place of the first label of the data center's host
+    (https://docs.workato.com/workato-api/data-tables.html).
+    """
+    host = urllib.parse.urlsplit(base_url(prof)).hostname or ""
+    first, _, rest = host.partition(".")
+    if first not in APP_HOST_LABELS or not f".{rest}".endswith(WORKATO_DOMAINS):
+        raise cli.Error(
+            f"the base URL of wk profile '{prof}' is not the web app of a data center, so its "
+            "data tables host is not known"
+        )
+    return f"https://{DATA_TABLES_LABEL}.{rest}/api/v1"
 
 
 def api(env: str, prof: str | None = None) -> Api:

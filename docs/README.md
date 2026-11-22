@@ -6,7 +6,7 @@ workspace.
 | Folder | What it holds | Owner |
 |---|---|---|
 | [setup/](setup/README.md) | how to create a workspace repository, join one, update it from the kit, and connect `wk`, Workato and your AI harness | the kit |
-| [conventions/](conventions/README.md) | the Python standard, the recipe doc template, the registry reference, the reasons behind the rules, and the workspace's own decision log (`decisions.md`) | the kit, except `decisions.md` |
+| [conventions/](conventions/README.md) | the Python standard, the recipe doc template, the Jobs view of a recipe, data masking, the registry reference, the reasons behind the rules, and the workspace's own decision log (`decisions.md`) | the kit, except `decisions.md` |
 | [knowledge/](knowledge/README.md) | notes on how the Workato platform behaves (`knowledge/workato/`); a workspace keeps its own notes in `knowledge/workspace/` | the kit, except `knowledge/workspace/` |
 | `<project-slug>/` | the docs of one Workato project | the workspace |
 

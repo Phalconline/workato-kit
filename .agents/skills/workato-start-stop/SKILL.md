@@ -50,6 +50,10 @@ Starting is the opposite direction: the recipe begins acting on real events.
 - Before a start, check that no other running recipe would process the same events: two recipes
   that handle one event both act on it. If the workspace keeps a recipe stopped on purpose, its
   rule is in the last section of `AGENTS.md`, "Rules of this workspace".
+- When a new recipe takes over from an old one, the switch is a stop of one side and then a start
+  of the other, never both running: the recipe state is the only lock. How to prepare such a
+  switch for a webhook recipe is in `docs/knowledge/workato/platform-notes-queueing.md`,
+  "Switching from one recipe to its replacement".
 
 ## Commands
 

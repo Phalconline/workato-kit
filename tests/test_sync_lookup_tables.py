@@ -60,9 +60,13 @@ class PartsTests(unittest.TestCase):
             },
             {"recipe_id": 4, "name": "Four", "doc": None, "tables": ["4001"]},
             {"recipe_id": 5, "name": "Five", "doc": "docs/x/5.md"},
+            {"recipe_id": 6, "name": "Six", "doc": "docs/x/6.md", "tables": ["lookup table 4001"]},
+            # A data table with the same number is another table.
+            {"recipe_id": 7, "name": "Seven", "doc": "docs/x/7.md", "tables": ["data table 4001"]},
         ]
         self.assertEqual(
-            tables.used_by(ORDERS_TABLE, index), [("One", "docs/x/1.md"), ("Three", "docs/x/3.md")]
+            tables.used_by(ORDERS_TABLE, index),
+            [("One", "docs/x/1.md"), ("Six", "docs/x/6.md"), ("Three", "docs/x/3.md")],
         )
 
     def test_personal_data_is_guessed_from_field_names_until_a_person_answers(self):

@@ -106,6 +106,24 @@ Source: documented, `recipes/triggers.html`, the start and stop page and `recipe
 - **Pending jobs fail** after a recipe has been stopped for 30 days.
 - **A recipe stops itself** after 60 consecutive errors while fetching trigger events.
 
+### Switching from one recipe to its replacement
+
+When a new recipe replaces an old one that another system posts to, a pattern that keeps the way
+back short:
+
+- Give the new recipe a webhook address of its own, and have the sending system post to both
+  addresses from the start. Leave the old address and every setting of the old recipe as they
+  are until the old recipe is retired.
+- Make the switch, and the way back, by recipe state alone: stop one side, check that none of
+  its jobs is still running, then start the other. Nothing has to change in the sending system
+  at the switch.
+- Never run both sides: each would act on the same event. The recipe state is the only lock.
+- Write the way back next to the switch in the runbook.
+
+The pattern rests on the stopped side dropping what it receives. Not verified: that a stopped
+webhook recipe never processes, after it is started, an event that arrived while it was stopped.
+Read the first jobs after a switch for events from before it.
+
 ## Batch and scheduled triggers
 
 Source: documented on the scheduled batch trigger of a connector, and in the general trigger

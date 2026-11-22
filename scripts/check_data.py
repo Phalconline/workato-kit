@@ -15,7 +15,6 @@ Exit status: 0 when every file is valid, 1 otherwise.
 
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -30,7 +29,7 @@ ID_FIELDS = ("project_id", "folder_id")
 # Every key a registry may hold. An unknown key is an error: a typo must not pass silently.
 REGISTRY_KEYS = {
     "description", "maintainer", "app_url", "company_domains", "lint_literal_patterns",
-    "environments", "projects", "notes",
+    "lint_prose_patterns", "environments", "projects", "notes",
 }  # fmt: skip
 ENVIRONMENT_KEYS = {"profile", "workspace", "notes"}
 PROJECT_KEYS = {
@@ -111,12 +110,13 @@ def validate_workspace_settings(data: dict[str, Any]) -> None:
         isinstance(domain, str) and wkrepo.DOMAIN.fullmatch(domain) for domain in domains
     ):
         raise RegistryError("company_domains must be a list of lower-case domains")
-    patterns = data.get("lint_literal_patterns", {})
-    if not isinstance(patterns, dict) or not all(
-        isinstance(label, str) and expression_compiles(expression)
-        for label, expression in patterns.items()
-    ):
-        raise RegistryError("lint_literal_patterns must map a label to a regular expression")
+    for key in ("lint_literal_patterns", "lint_prose_patterns"):
+        patterns = data.get(key, {})
+        if not isinstance(patterns, dict) or not all(
+            isinstance(label, str) and expression_compiles(expression)
+            for label, expression in patterns.items()
+        ):
+            raise RegistryError(f"{key} must map a label to a regular expression")
 
 
 def expression_compiles(expression: Any) -> bool:
@@ -206,15 +206,7 @@ def validate_registry(data: Any) -> None:
 
 def tracked_json_files() -> list[str]:
     """Return the JSON files git tracks or would track, relative to the repository root."""
-    git = wkrepo.executable("git")
-    listed = subprocess.run(
-        [git, "ls-files", "-co", "--exclude-standard", "-z"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return sorted({path for path in listed.stdout.split("\0") if path.endswith(".json")})
+    return [path for path in wkrepo.tracked_files() if path.endswith(".json")]
 
 
 def is_registry(relative: str) -> bool:

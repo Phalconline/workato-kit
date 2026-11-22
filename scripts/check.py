@@ -4,9 +4,9 @@
     scripts/check.py
 
 In order: Ruff lint, Ruff format, mypy, the unit tests, the JSON files and the registry, the
-generated harness files, the Markdown links, the secret patterns, the files of the kit (they may
-hold nothing of a workspace) and the ignore rules. A failed check does not stop the ones after
-it. Nothing is written except temporary test fixtures.
+generated harness files, the Markdown links, the step numbers in recipe docs, the secret
+patterns, the files of the kit (they may hold nothing of a workspace) and the ignore rules. A
+failed check does not stop the ones after it. Nothing is written except temporary test fixtures.
 
 No Workato access, no credentials and no network are needed. Ruff and mypy are taken from .venv;
 `make dev` installs them there.
@@ -50,6 +50,7 @@ def steps(python: str) -> list[Step]:
         ("JSON files and registry", [*script, "scripts/check_data.py"]),
         ("Generated harness files", [*script, "scripts/sync_harness.py", "--check"]),
         ("Markdown links", [*script, "scripts/check_links.py"]),
+        ("Step numbers in recipe docs", [*script, "scripts/check_step_numbers.py"]),
         ("Secret patterns", [*script, "scripts/check_secrets.py"]),
         ("Kit files hold no workspace data", [*script, "scripts/check_kit_files.py"]),
     ]

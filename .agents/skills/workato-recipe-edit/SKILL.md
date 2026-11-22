@@ -1,6 +1,6 @@
 ---
 name: workato-recipe-edit
-description: Change a Workato recipe in Dev safely. Use before building, editing or pushing any recipe through the Workato MCP recipe builder or the wk CLI. Covers the project check, the pull-compare-push-verify procedure, comments and descriptions, connections, lint, and what to record afterwards.
+description: Change a Workato recipe in Dev safely. Use before building, editing or pushing any recipe through the Workato MCP recipe builder or the wk CLI. Covers the project check, the pull-compare-push-verify procedure, comments and descriptions, connections, the job report, data masking, lint, and what to record afterwards.
 ---
 
 # Change a recipe in Dev
@@ -19,6 +19,9 @@ session, load `environment-preflight` first.
   `projects.<slug>.dev.project_id` in the registry. A project with `"snapshots": true` is a
   managed project; any other recipe is in a Dev-only project or in none the registry knows.
 - A name or a prefix does not tell you the project. Lint and doc location depend on it.
+- Run `scripts/doc_sync.py plan <dev recipe id>` and refresh what it lists as stale
+  (`recipe-docs`, rule **Sync the docs around a recipe**). You then edit against docs you can
+  trust, and the docs of what the recipe calls, uses and shares are current before the change.
 - Check `running` first. Workato refuses every change to a running recipe, the description
   included; only a tag can be added without a stop (observed:
   `docs/knowledge/workato/recipe-builder-traps.md`). A stop and a start need the request to say
@@ -64,7 +67,23 @@ wk -p <dev-profile> recipes update <id> <file>
   stale when a step number or a recipe id it names changes: then say so in chat with the current
   text and a suggested replacement, and let the person make the edit.
 - A description follows rule **A description describes**. Test notes and release to-dos go in a
-  runbook or a backlog, not in the recipe.
+  runbook or a backlog, not in the recipe. Neither a description nor a comment compares the
+  recipe with an older version or with a system it replaced. Before you upload recipe JSON you
+  generated, read every `comment` field and the comment lines of every code step for that.
+- **The job report.** A recipe you create gets its job report (the columns of its Jobs tab) in
+  the same push as its steps. After an edit, review the columns against the changed recipe and
+  fix them in the same task: a step that was removed or renamed, a new key input, a new outcome
+  (rule **A recipe has a Jobs view**). The columns are chosen for this recipe alone, never copied
+  as a template. What to choose, the limits and the JSON keys are in
+  `docs/conventions/job-view.md`.
+- **Data masking** (rule **Sensitive data stays out of job history**,
+  `docs/conventions/data-masking.md`). Every step that creates, reads or passes on a password, a
+  passcode, a token, an API key or a client secret has "Mask data" on (`"mask_data": true` on
+  the block in the raw JSON), and such a value never goes into a chat or e-mail message, a logger
+  step, a job report column, a function's result or a `catch` message, unless a person receives
+  it by design. A step that holds personal data of people outside the organization is masked
+  too, unless the recipe doc says why it stays readable. Set the masks in the same push as the
+  steps, and never remove a mask a person set unless the request says so.
 - Bind only connections that rule **Connections stay in reach of a deployment** allows, even when
   the builder offers another one. See `workato-assets`.
 - Common traps of the builder are in `docs/knowledge/workato/recipe-builder-traps.md`.
@@ -79,9 +98,10 @@ diff <(python3.14 -m json.tool --sort-keys tmp/edits/<YYYY-MM-DD>-<topic>/<id>-b
      <(python3.14 -m json.tool --sort-keys tmp/edits/<YYYY-MM-DD>-<topic>/<id>-remote.json)
 ```
 
-- No output means nothing changed. A quicker check compares `version` in the base file with the
-  `version` that `wk -p <dev-profile> recipes get <id> -j` shows. If the recipe changed, pull
-  again (`recipe_builder_pull` and the raw JSON) and reapply the intended edits.
+- No output means nothing changed. Compare the two files, not a version number. Observed:
+  `wk recipes get <id> -j` reported `version` 0 for a recipe that had been saved many times. If
+  the recipe changed, pull again (`recipe_builder_pull` and the raw JSON) and reapply the
+  intended edits.
 - Do not push while a person is editing that recipe in the UI.
 - After the push, verify the saved changes with `recipe_get` and report them. The raw JSON is
   the source to trust over the render of the MCP pull:
@@ -121,8 +141,9 @@ scripts/lint_recipes.py
 - The script refreshes the Dev copy into `tmp/wk/dev/` with one GET per recipe, runs `wk lint`
   with the kit's `scripts/wklintrc.json` (or the workspace's own `wklintrc.json`), drops the
   known false positives of three lint rules and adds the house checks: `PROPERTY_MISSING`,
-  `MAGIC_LITERAL`, `UNFINISHED_STEP` and `SKIPPED_STEP`. A project that lists them under
-  `lint_checks` in the registry also gets `ACCOUNT_PROPERTY` and `NO_GUARD_PROPERTY`.
+  `MAGIC_LITERAL`, `UNFINISHED_STEP`, `SKIPPED_STEP` and `UNMASKED_CREDENTIAL`, and
+  `PROSE_PATTERN` when the registry lists `lint_prose_patterns`. A project that lists them under `lint_checks` in the registry
+  also gets `ACCOUNT_PROPERTY`, `NO_GUARD_PROPERTY` and `JOB_VIEW`.
 - A recipe of a registered project that was never deployed (no Prod half in the registry): name
   the project, so the script finds it.
 
@@ -146,7 +167,16 @@ wk lint tmp/edits/<YYYY-MM-DD>-<topic>/<id>-after.json --config-path scripts/wkl
 
 ## 5. Record and report
 
-- Update the recipe's repo doc in the same task (`recipe-docs`).
+- Update the recipe's repo doc in the same task (`recipe-docs`), the "Jobs tab columns" and
+  "Masked steps" lines of its Configuration section included. Then stamp what you compared:
+
+```bash
+scripts/doc_sync.py stamp recipe:<dev_recipe_id>
+```
+
+- Where the rules of the workspace say that tags are applied as part of a build, a recipe you
+  created, or whose tags the change affects, gets its tags in the same task (`workato-assets`,
+  "Tags as part of a build").
 - Step numbers go in chat as Workato UI numbers (the JSON indexes the trigger as 0, so add 1).
   They never go into a recipe doc.
 - Say in the same message what was pushed, started or stopped, naming each recipe.

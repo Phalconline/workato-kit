@@ -114,8 +114,10 @@ Observed to work. Workato documents the form
 of `--json` (<https://docs.workato.com/en/workato-api/projects.html>).
 
 The script reads the Dev token inside its own process; `wk auth token` is never run in a shell
-(**Secrets**). The call deploys the whole project. Not verified: that single assets can be
-selected only in the UI (Deploy, then Customize). Read the result in the deployments list:
+(**Secrets**). The call deploys the whole project. Observed: in the UI (Deploy, then Customize)
+a person can choose single assets, and the review screen lists what the deployment adds and
+updates; a custom connector can show there as updated although both environments hold the same
+released code. Read the result in the deployments list:
 
 ```bash
 scripts/wk_api.py dev GET /deployments -q project_id=<dev project id>
@@ -123,10 +125,14 @@ scripts/wk_api.py dev GET /deployments -q project_id=<dev project id>
 
 Say in the same message what was deployed and what it does in Prod:
 
-- Not verified: a running recipe that changed is stopped, updated and started again, and a call
-  to a recipe function during its restart fails the caller with `WRF00409`.
-- Not verified: a recipe new to Prod arrives stopped. Starting it is a separate step that needs
-  the request to say so (`workato-start-stop`).
+- Observed: Workato stops the running recipes the deployment carries, updates them and starts
+  them again. Not verified: that a call to a recipe function during its restart fails the caller
+  with `WRF00409`.
+- Observed: a recipe new to Prod arrives stopped. Starting it is a separate step that needs the
+  request to say so (`workato-start-stop`).
+- Observed: a recipe that ran before a deployment can be stopped after it, with no stop in the
+  record. Compare the `running` state of every Prod recipe of the project after the deployment
+  with the state before it (see "After").
 
 ## What a deployment does not do
 
@@ -153,6 +159,11 @@ Source: <https://docs.workato.com/features/environments/deployment.html>
   connection outside its own project and outside the project marked `shared_connections` leaves
   the Prod slot empty (**Connections stay in reach of a deployment**). `scripts/prod_drift.py`
   reports it as `BINDING`.
+- **The second connection of one connector.** Observed on one recipe, at each of its
+  deployments: a recipe that binds two connections of the same connector has a second slot in
+  its `config` (`<provider>_secondary`), and that slot arrived empty in Prod although both
+  connections belong to the recipe's own project. Read the bindings of such a recipe after every
+  deployment.
 - **Tags.** They travel only when the deployment includes them ("Include tags" in the UI,
   `include_tags` in the API; documented, see `docs/knowledge/workato/platform-notes-tags.md`).
   The call above does not include them. Tags in Prod are set as a separate step
@@ -185,6 +196,11 @@ scripts/sync_recipes.py prod
 git diff --stat workato/workspaces/<workspace>/projects/
 ```
 
+The diff of each project's `index.json` shows the `running` state of every recipe: a recipe that
+ran before the deployment and is stopped after it is a finding to report, and starting it again
+needs the request to say so. A binding the deployment emptied shows in the `config` of the
+recipe's JSON.
+
 Commit it with the doc changes of the same task. If the deployment brought a recipe that is new
 to Prod, refresh the Dev copies first and then write its `prod_recipe_id` into its doc:
 
@@ -198,10 +214,10 @@ A connection's `success` status does not prove that it works (observed:
 re-authorized connection is started, say which run would prove the connection and ask for it
 (**No jobs on your own**).
 
-If the team keeps pages about its recipes in Confluence, update the page of every recipe the
-deployment changed, and the project's main page where it describes them, from the Prod recipes
-(`confluence-recipe-pages`). That is part of the deployment, not a separate request. Report the
-pages and what changed.
+If the team keeps pages about its recipes in Confluence, update every published page that states
+something the deployment changed: the page of each changed recipe, and the project's main page
+where it describes them, from the Prod recipes (`confluence-recipe-pages`). That is part of the
+deployment, not a separate request. Report the pages and what changed.
 
 ## This workspace
 

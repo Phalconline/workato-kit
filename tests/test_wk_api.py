@@ -14,6 +14,8 @@ from tests import support
 
 TOKEN = "fake-token-for-tests"
 US_API = "https://www.workato.com/api"
+US_RECORDS = "https://data-tables.workato.com/api/v1"
+TABLE = "/tables/0f1e2d3c-4b5a-4978-8695-a4b3c2d1e0f9"
 
 
 class Response:
@@ -51,6 +53,7 @@ class WkApiTests(unittest.TestCase):
             patch.object(wkrepo, "token", return_value=TOKEN) as token,
             patch.object(wkrepo, "profile", return_value="profile"),
             patch.object(wkrepo, "api_url", return_value=api_root) as located,
+            patch.object(wkrepo, "data_tables_api_url", return_value=US_RECORDS),
             patch.object(wkrepo.OPENER, "open", open_),
         ):
             result = support.run_main(api.main, *argv)
@@ -77,6 +80,40 @@ class WkApiTests(unittest.TestCase):
     def test_leading_api_segment_and_lower_case_method_are_accepted(self):
         _, sent, _ = self.call("prod", "get", "/api/deployments")
         self.assertEqual(sent[0].full_url, "https://www.workato.com/api/deployments")
+
+    def test_data_tables_calls_go_to_the_record_api_and_a_query_needs_no_write_flag(self):
+        result, sent, _ = self.call(
+            "dev", "POST", f"{TABLE}/query", "--data-tables", "--json", '{"limit": 5}'
+        )
+        self.assertEqual(result.code, 0)
+        self.assertEqual(sent[0].full_url, f"{US_RECORDS}{TABLE}/query")
+        self.assertEqual(sent[0].get_header("Authorization"), f"Bearer {TOKEN}")
+        _, sent, _ = self.call("dev", "post", f"/api/v1{TABLE}/query", "--data-tables")
+        self.assertEqual(sent[0].full_url, f"{US_RECORDS}{TABLE}/query")
+        _, sent, _ = self.call("dev", "GET", f"{TABLE}/records/7/fields/2/file", "--data-tables")
+        self.assertEqual(sent[0].full_url, f"{US_RECORDS}{TABLE}/records/7/fields/2/file")
+
+    def test_a_record_write_needs_the_flag_like_every_other_write(self):
+        cases = (("POST", f"{TABLE}/records"), ("PUT", f"{TABLE}/records/7"), ("DELETE", TABLE))
+        for method, path in cases:
+            with self.subTest(method=method, path=path):
+                result, sent, lookups = self.call("dev", method, path, "--data-tables")
+                self.assertEqual((result.code, sent, lookups), (2, [], 0))
+                self.assertIn("--write", result.err)
+        result, sent, _ = self.call(
+            "dev", "POST", f"{TABLE}/records", "--data-tables", "--write", "--json", "{}"
+        )
+        self.assertEqual((result.code, sent[0].get_method()), (0, "POST"))
+        # Without --data-tables a path that ends in /query is a write like any other POST.
+        result, sent, _ = self.call("dev", "POST", f"{TABLE}/query")
+        self.assertEqual((result.code, sent), (2, []))
+
+    def test_data_tables_calls_stay_below_tables(self):
+        for path in ("/recipes", "/properties", "/tables", "/api/v1/users"):
+            with self.subTest(path=path):
+                result, sent, lookups = self.call("dev", "GET", path, "--data-tables")
+                self.assertEqual((result.code, sent, lookups), (2, [], 0))
+                self.assertIn("must start with /tables/", result.err)
 
     def test_write_needs_the_flag_and_is_refused_before_any_credential_lookup(self):
         for method in ("POST", "PUT", "PATCH", "DELETE"):

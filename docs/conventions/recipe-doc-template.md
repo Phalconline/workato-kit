@@ -42,7 +42,9 @@ The recipes it calls, each as a link, with the call type and the fields it passe
 What it changes in which system, and what it returns to a caller.
 
 ## Configuration
-Connections, project properties, lookup tables and data tables it reads.
+Connections, project properties, lookup tables and data tables it reads, the columns of its
+Jobs tab (job-view.md), and its masked steps, or why a step with personal data stays readable
+(data-masking.md).
 
 ## Known limitations
 What it does not handle, and how that shows.
@@ -134,6 +136,8 @@ One invoice in the ERP. It returns the invoice number to the caller.
 - Connection `[SO] ERP`.
 - Project property `protected_accounts`: an order of a listed account gets no invoice.
 - Project property `orders_channel`: where a failure is posted, through `[CM] Slack`.
+- Jobs tab columns: `Order`, `Account`, `Invoice`.
+- Masked steps: none. It handles no credential and no personal data.
 
 ## Known limitations
 An order with no line items fails the job; the caller's job shows the ERP's error text.

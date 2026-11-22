@@ -210,6 +210,28 @@ class ProfileTests(unittest.TestCase):
             wkrepo.app_host("https://app.eu.workato.com/"), "https://app.eu.workato.com"
         )
 
+    def test_the_data_tables_host_is_the_one_of_the_same_data_center(self):
+        hosts = {
+            "https://www.workato.com": "https://data-tables.workato.com/api/v1",
+            "https://app.workato.com": "https://data-tables.workato.com/api/v1",
+            "https://app.eu.workato.com/": "https://data-tables.eu.workato.com/api/v1",
+            "https://app.workatoapp.cn": "https://data-tables.workatoapp.cn/api/v1",
+        }
+        for url, expected in hosts.items():
+            entry = {"name": "acme-dev", "base_url": url}
+            with self.subTest(url=url), patch.object(wkrepo, "profiles", return_value=[entry]):
+                self.assertEqual(wkrepo.data_tables_api_url("acme-dev"), expected)
+
+    def test_a_base_url_that_is_no_web_app_host_has_no_data_tables_host(self):
+        for url in ("https://docs.workato.com", "https://data-tables.workato.com"):
+            entry = {"name": "acme-dev", "base_url": url}
+            with (
+                self.subTest(url=url),
+                patch.object(wkrepo, "profiles", return_value=[entry]),
+                self.assertRaisesRegex(cli.Error, "data tables host is not known"),
+            ):
+                wkrepo.data_tables_api_url("acme-dev")
+
     def test_a_profile_of_the_file_store_gets_the_store_flag(self):
         self.assertEqual(wkrepo.store_flags("acme-dev"), [])
         self.assertEqual(wkrepo.store_flags("acme-prod"), ["--store-type", "file"])
@@ -219,6 +241,24 @@ class ProfileTests(unittest.TestCase):
             run.call_args.args,
             ("-p", "acme-prod", "--store-type", "file", "recipes", "get", "3001", "-j"),
         )
+
+
+class TrackedFilesTests(unittest.TestCase):
+    def test_the_files_git_knows_are_listed_in_order(self):
+        listed = subprocess.CompletedProcess([], 0, stdout="b.md\0a.md\0c/d.py\0", stderr="")
+        with patch.object(subprocess, "run", return_value=listed) as run:
+            self.assertEqual(wkrepo.tracked_files(), ["a.md", "b.md", "c/d.py"])
+        self.assertEqual(
+            run.call_args.args[0][1:], ["ls-files", "-co", "--exclude-standard", "-z"]
+        )
+
+    def test_a_folder_that_is_no_git_repository_is_an_expected_error(self):
+        failed = subprocess.CompletedProcess([], 128, stdout="", stderr="fatal: not a git repo")
+        with (
+            patch.object(subprocess, "run", return_value=failed),
+            self.assertRaisesRegex(cli.Error, "needs? a git clone"),
+        ):
+            wkrepo.tracked_files()
 
 
 class WkTests(unittest.TestCase):

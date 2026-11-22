@@ -207,8 +207,9 @@ What the scripts read:
 | `scripts/prod_drift.py` | Dev and Prod | for each project: its folders, the recipes of each folder, then each recipe (`wk recipes get`); every connection; the project properties with their values (`GET /properties`) |
 | `scripts/prod_jobs_report.py` | Prod, or the profile `--profile` names | every recipe the client sees, the jobs of each in the window (`GET /recipes/<id>/jobs`), each failed job (`GET /recipes/<id>/jobs/<job id>`), and the audit log (`GET /activity_logs`) |
 | `scripts/sync_lookup_tables.py` | Dev | the lookup tables with their column definitions (`GET /lookup_tables`, every page), never rows |
-| `scripts/wk_api.py` | the one you name | the endpoint you call; the deployments and the deploy call are in Dev |
-| `scripts/render_recipe.py`, `scripts/link_prod_ids.py`, `scripts/build_index.py` | none | local files only |
+| `scripts/doc_sync.py` | Dev | every recipe the client sees, with its code (`wk recipes list`, every page), and every connection (`wk connections list`); `stamp` also reads each stamped recipe (`GET /recipes/<id>`). Never rows of a table |
+| `scripts/wk_api.py` | the one you name | the endpoint you call; the deployments and the deploy call are in Dev. With `--data-tables`: the record API of data tables, on the `data-tables` host of the same data center |
+| `scripts/render_recipe.py`, `scripts/link_prod_ids.py`, `scripts/build_index.py`, `scripts/check_step_numbers.py` | none | local files only |
 
 `GET /properties` answers with names and values. `scripts/sync_recipes.py` keeps the names only,
 `scripts/prod_drift.py` compares the values without printing them, and `scripts/wk_api.py`

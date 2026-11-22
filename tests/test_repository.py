@@ -104,6 +104,13 @@ class ClaudeSettingsTests(unittest.TestCase):
                 self.assertRegex(rule, r"^Bash\(scripts/wk_api\.py (dev|prod) GET /[a-z_]+\*\)$")
                 self.assertNotIn("properties", rule)
 
+    def test_only_the_reading_commands_of_doc_sync_run_without_asking(self):
+        # `stamp` records that a doc was compared with Workato: a claim a person should see.
+        rules = sorted(rule for rule in self.allow if "scripts/doc_sync.py" in rule)
+        self.assertEqual(
+            rules, ["Bash(scripts/doc_sync.py plan *)", "Bash(scripts/doc_sync.py status *)"]
+        )
+
     def test_no_wk_write_is_allowed_without_asking(self):
         writes = {
             "start", "stop", "update", "update-connection", "create", "delete", "deploy", "push",

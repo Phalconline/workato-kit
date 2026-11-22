@@ -4,12 +4,21 @@
     scripts/wk_api.py dev GET /deployments -q project_id=<id>
     scripts/wk_api.py prod GET /recipes -q folder_id=<id> -q 'includes[]=tags'
     scripts/wk_api.py dev POST /projects/<id>/deploy --write --json '{"environment_type": "prod"}'
+    scripts/wk_api.py dev POST /tables/<uuid>/query --data-tables --json '{"limit": 5}'
+    scripts/wk_api.py dev POST /tables/<uuid>/records --data-tables --write --json-file row.json
 
 The environment (dev or prod) selects the `wk` profile of the registry. The path is relative to
 the developer API of that profile's data center (https://www.workato.com/api for the US one) and
 starts with a slash; a leading /api is accepted. The token is read from `wk` inside this process
 and is never printed. It is sent only to the host `wk` holds for the profile: a redirect is
 reported as an error, never followed.
+
+With --data-tables the call goes to the record API of data tables instead: the host
+`data-tables` of the same data center, below /api/v1, with the same token and the same rules.
+Only paths under /tables/ are allowed there (a leading /api/v1 is accepted), and a table is named
+by its UUID, not by its numeric id. A POST to .../query only reads, so it needs no --write. What a
+query returns is table data: it can hold personal data and never goes into the repository
+(AGENTS.md, "No secrets and no table data in the repository").
 
 Anything but GET changes Workato and needs --write. The flag only stops an accident. Whether the
 change may be made at all is decided by AGENTS.md: a start, a stop, a deletion and any write in
@@ -38,6 +47,7 @@ from lib import cli, wkrepo
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 FORBIDDEN_IN_PATH = "?#\\% \t\r\n"
 SHOWN_ERROR_LENGTH = 2000
+RECORD_API_PREFIX = "/api/v1"  # where the data tables host serves its record API
 # The method, the path with its query (relative to the API root), the body, and the one property
 # a property read may print.
 type Call = tuple[str, str, bytes | None, str | None]
@@ -56,6 +66,18 @@ def api_path(path: str) -> str:
         )
     if any(segment.startswith(".") for segment in path.split("/")):
         raise cli.Error("the path may not contain a segment that starts with a dot")
+    return path
+
+
+def data_tables_path(path: str) -> str:
+    """Return a path of the data tables record API, or refuse one outside /tables/."""
+    if path == RECORD_API_PREFIX or path.startswith(RECORD_API_PREFIX + "/"):
+        path = path.removeprefix(RECORD_API_PREFIX)
+    path = api_path(path)
+    if not path.startswith("/tables/"):
+        raise cli.Error(
+            "with --data-tables the path must start with /tables/: /tables/<uuid>/query"
+        )
     return path
 
 
@@ -89,12 +111,14 @@ def request_body(args: argparse.Namespace) -> bytes | None:
 
 def build(args: argparse.Namespace) -> Call:
     """Return the request to send, or refuse it. Neither `wk` nor a credential is touched here."""
-    path = api_path(args.path)
+    path = data_tables_path(args.path) if args.data_tables else api_path(args.path)
     pairs = query_pairs(args.query)
     body = request_body(args)
     if args.method == "GET" and body is not None:
         raise cli.Error("a GET takes no body")
-    if args.method != "GET" and not args.write:
+    # A query of the record API is a POST that only reads.
+    record_query = args.data_tables and args.method == "POST" and path.endswith("/query")
+    if args.method != "GET" and not record_query and not args.write:
         raise cli.Error(
             f"{args.method} changes Workato; repeat the command with --write "
             "if the request asked for this change"
@@ -175,12 +199,18 @@ def main(argv: list[str] | None = None) -> int:
     body.add_argument("--json", dest="body", metavar="JSON", help="request body")
     body.add_argument("--json-file", metavar="FILE", help="file holding the request body")
     parser.add_argument("--write", action="store_true", help="required for anything but GET")
+    parser.add_argument(
+        "--data-tables",
+        action="store_true",
+        help="call the record API of data tables (paths under /tables/) instead of the main API",
+    )
     args = parser.parse_args(argv)
 
     call = build(args)
     only_property = call[3]
     profile = wkrepo.profile(args.environment)
-    answer = send(call, wkrepo.api_url(profile), wkrepo.token(profile))
+    root = wkrepo.data_tables_api_url(profile) if args.data_tables else wkrepo.api_url(profile)
+    answer = send(call, root, wkrepo.token(profile))
     if answer is None:
         return cli.EXIT_FINDINGS
 

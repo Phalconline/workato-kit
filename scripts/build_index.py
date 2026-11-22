@@ -11,9 +11,12 @@ One entry per documented recipe. Where it comes from:
    inventory/recipes.json (a list of objects with recipe_id and any of name, path, severity,
    owner), its values fill what a doc leaves empty.
 2. The Dev recipe JSON in tmp/wk/dev/<project>/ of every managed project that has a copy there:
-   trigger, step count, connectors and forward calls, and two lists: `tables`, the tables the
-   registry names under `tables` whose id the recipe holds, and `properties`, the names of the
-   project properties it reads. Refresh the copy first with
+   trigger, step count, connectors and forward calls, and two lists: `tables` and `properties`,
+   the names of the project properties it reads. `tables` holds the tables the registry names
+   under `tables` whose id the recipe holds anywhere, as `<name> (<id>)`, and every other table
+   that a data table step or a lookup table step names by its id, as `data table <id>` or
+   `lookup table <id>`. A table that a step names by a datapill, or a lookup table that a formula
+   reads by name, is not found. Refresh the copy first with
    `scripts/sync_recipes.py dev`. The docs carry Dev ids, so the Prod copy cannot be used for
    this. A project without a Dev copy keeps these values from the current index, and the script
    says so.
@@ -47,6 +50,11 @@ TRIGGER_PROVIDERS = {
 # What is recomputed from the Dev JSON of a recipe, and kept from the current index without one.
 COMPUTED = ("trigger_type", "step_count", "connectors", "calls", "tables", "properties")
 VERDICT_ORDER = {"Decommission": 0, "Rewrite": 1, "Merge": 2, "Investigate": 3, "Keep": 4}
+# The steps that read or write a table: the input field that holds its id, and how it is listed.
+TABLE_STEPS = {
+    "workato_db_table": ("table_id", "data table"),
+    "lookup_table": ("lookup_table_id", "lookup table"),
+}
 PROPERTY_NAME = re.compile(r'property_name\\+"\s*:\s*\\+"([A-Za-z0-9_\-]+)')
 NUMBERED_ITEM = re.compile(r"^\d+\.\s", re.MULTILINE)
 QUOTES = "\"'"
@@ -127,13 +135,30 @@ def calls(all_steps: list[Json], names: dict[int, Any]) -> list[Json]:
     return found
 
 
+def tables_used(all_steps: list[Json], blob: str, tables: dict[str, str]) -> list[str]:
+    """Return the tables a recipe uses: the ones the registry names, then the ones its steps name.
+
+    A table of the registry is found by its id anywhere in the recipe JSON. Any other table is
+    found where a data table step or a lookup table step holds its id as a number.
+    """
+    found = [name for table, name in tables.items() if re.search(rf"(?<!\d){table}(?!\d)", blob)]
+    for step in all_steps:
+        field, kind = TABLE_STEPS.get(str(step.get("provider")), ("", ""))
+        step_input = step.get("input")
+        table_id = str(step_input.get(field) or "") if isinstance(step_input, dict) else ""
+        label = f"{kind} {table_id}"
+        if table_id.isdigit() and table_id not in tables and label not in found:
+            found.append(label)
+    return found
+
+
 def live_record(code: Json, names: dict[int, Any], tables: dict[str, str]) -> Json:
     """Return what the Dev JSON of one recipe says about it.
 
     Args:
         code: Its step tree.
         names: Recipe names by id, to name the recipes it calls.
-        tables: The tables to look for, as {table id: label}.
+        tables: The tables the registry names, as {table id: label}.
     """
     all_steps = steps(code)
     connectors: list[str] = []
@@ -147,9 +172,7 @@ def live_record(code: Json, names: dict[int, Any], tables: dict[str, str]) -> Js
         "step_count": len(all_steps),
         "connectors": connectors,
         "calls": calls(all_steps, names),
-        "tables": [
-            name for table, name in tables.items() if re.search(rf"(?<!\d){table}(?!\d)", blob)
-        ],
+        "tables": tables_used(all_steps, blob, tables),
         "properties": sorted(set(PROPERTY_NAME.findall(blob))),
     }
 

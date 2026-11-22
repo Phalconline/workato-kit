@@ -4,6 +4,8 @@
 |---|---|
 | [registry.md](registry.md) | every key of the workspace's `registry.json` and `harness.json`, and which script reads it |
 | [recipe-doc-template.md](recipe-doc-template.md) | the template of a recipe doc, with an example |
+| [job-view.md](job-view.md) | the job report of a recipe: the columns of its Jobs tab, chosen per recipe |
+| [data-masking.md](data-masking.md) | which steps are masked in job history: credentials, and personal data of people outside the organization |
 | [python.md](python.md) | how the scripts and their tests are written: layout, style, linter, type checker |
 | [rationale.md](rationale.md) | why each rule of `AGENTS.md` exists |
 | [decisions.md](decisions.md) | the workspace's own decision log; it starts empty |

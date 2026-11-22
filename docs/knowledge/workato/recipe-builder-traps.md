@@ -257,6 +257,18 @@ change. The skill `workato-recipe-edit` makes that part of the procedure.
   form `<name>_<first 4 hex characters of the uuid>`, point the datapills at the new `as`, and
   number the steps depth-first. The recipe lands stopped, with the connections of its `config`
   bound. Run `wk lint` on the file before the import and `scripts/lint_recipes.py` after it.
+- A webhook trigger uploaded as raw JSON loses its payload schema unless the trigger block
+  carries its extended input schema and the flag that marks its setup wizard as finished
+  (`wizardFinished`). Copy both from a trigger that was set up in the UI, then read the saved
+  recipe back.
+- The job report (the columns of the Jobs tab) travels in the raw JSON as two keys of the
+  trigger block, `job_report_schema` and `job_report_config`
+  ([job-view.md](../../conventions/job-view.md)). Leaving them out of an upload removes the
+  columns.
+- Text a generator wrote reaches Workato unread: read every `comment` and the comment lines of
+  every code step before the upload (rule **A description describes**).
+- `wk recipes get <id> -j` can report `version` 0 for a recipe that was saved many times. To see
+  whether a recipe changed, compare a fresh `wk recipes pull` with your base file.
 
 ## Schedules and test copies
 

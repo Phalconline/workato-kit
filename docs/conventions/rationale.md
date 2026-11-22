@@ -168,6 +168,52 @@ note, a release to-do or a run-state note such as "Not run yet" is true for a sh
 misleads. Observed: a running recipe's description cannot be changed without a stop, so a stale
 note stays until the next one. Notes of that kind belong in a runbook or the backlog.
 
+A description or a comment that compares the recipe with an older version, or with the system it
+replaced ("as the old export did"), describes something the reader cannot see, and it is wrong
+the day that system is gone. Generated recipes are where such comparisons slip in, a comment
+inside a code step included. The comparison is history: it belongs in the repository docs.
+`lint_prose_patterns` in the registry lets `scripts/lint_recipes.py` find the words a workspace
+does not want in that text (`PROSE_PATTERN`).
+
+### A recipe has a Jobs view.
+
+Without custom columns every row of a recipe's Jobs tab looks the same, so finding the job of one
+order or one customer means opening job after job. Documented: a job report can be created or
+changed only while the recipe is stopped, and a change shows only on jobs created after it
+(<https://docs.workato.com/recipes/jobs.html>). A report added later therefore costs a stop and
+is missing on every earlier job; built with the recipe it costs nothing. Columns go stale the way
+comments do: a column that reads a step that was removed stays blank and raises no error. That
+is why the report is reviewed after every edit, and why a project can switch on the lint check
+`JOB_VIEW`. The columns are chosen per recipe because a template fills the tab with columns that
+say nothing about the job at hand.
+
+### Sensitive data stays out of job history.
+
+Workato keeps the input and the output of every step of a job, for 30 or 90 days by plan
+(documented: <https://docs.workato.com/security/data-protection/data-retention.html>), and
+everyone with access to job history reads them. A password or a token there works for each of
+those readers. Data masking is set per step and hides that step's input and output (documented:
+<https://docs.workato.com/features/data-masking.html>); the documentation does not say that a
+later, unmasked step hides a value it received, so every step a credential passes through is
+masked.
+
+A mask covers the job log and the audit log, not what a step sends out. Not verified: whether the
+`message` of a caught error quotes the request it answers. Some APIs echo the request in an error
+body, so the rule treats a `catch` message posted to a chat channel as able to carry the
+credential that a masked step protected. That is why the rule also says where a credential must
+never go.
+
+Personal data of people outside the organization is masked by default because nobody chose to
+show it: it arrives with a form or a webhook and stays readable unless someone decides otherwise.
+The rule does not forbid keeping it readable. Masking a trigger hides what started each job and
+takes its fields out of the Jobs tab columns, which can cost more than it protects. It asks for
+the reason in the recipe doc, so that the choice is made once and can be read later.
+
+Everything else stays readable, because job history is what a failed job is debugged with. A mask
+a person set is kept: it records a decision the agent does not know the reason for.
+`scripts/lint_recipes.py` finds a step that carries a credential by name and is not masked
+(`UNMASKED_CREDENTIAL`); it reads names only, so it finds candidates, not proof.
+
 ## Repository
 
 ### Generated files are never edited by hand.
@@ -175,7 +221,8 @@ note stays until the next one. Notes of that kind belong in a runbook or the bac
 The next run of the generating script overwrites a hand edit, and `make check` runs
 `scripts/sync_harness.py --check`, which fails on a harness file that differs from its source.
 The Prod copy in `projects/` is the reference for what Prod holds: a hand edit there would later
-read as a change in Prod. `scripts/build_index.py` keeps the callers (`called_by`) that earlier
+read as a change in Prod. `inventory/doc-sync.json` records the comparisons that were made; an
+edit by hand would claim one that was not. `scripts/build_index.py` keeps the callers (`called_by`) that earlier
 runs gathered, and every key it does not write itself, from the current index, so the index is
 also its own input: deleting it loses them. The two vendor skills are pinned copies under
 Apache-2.0, which requires a modified file to carry a notice of the change; the update procedure
@@ -248,11 +295,36 @@ recipe says nothing to a reader and differs between Dev and Prod; a name, the ca
 fields passed say what the call does. A provenance line repeats what `verified` and
 `last_reviewed` in the frontmatter hold.
 
+A rule that only a reader enforces erodes: step numbers come back with the next doc written from
+a step tree. `scripts/check_step_numbers.py` runs in `make check` and finds the word "step" with
+a number, and a numbered list that does not count from 1 in a row, the shape of an outline
+numbered by step. A recipe name that carries such a number is not a finding. A datapill alias
+with a number is left to people, because a column name such as `col_1` looks the same.
+
 ### A decommission proposal states the blast radius
 
 A recipe function that is stopped or removed fails every caller at the call step, and the
 failure shows only when a caller runs. Naming the callers first lets the reader weigh the risk
 before the recommendation.
+
+### Sync the docs around a recipe.
+
+A doc is only as true as its last comparison with Workato, and nothing tells a reader when that
+was: a recipe changes in the UI, and its doc is not told. A change planned from a stale doc is
+planned against a recipe that no longer exists. The docs around a recipe matter as much as its
+own, because what it calls, what calls it and what shares a table with it is where a change
+breaks something.
+
+`scripts/doc_sync.py` makes staleness visible. A stamp keeps the `updated_at` Workato showed when
+the doc was compared, so a later change in Workato shows as stale without anyone remembering it.
+A connection keeps its name; a table has no marker the script reads, so for those the age of the
+stamp is the only signal, which is why a stamp older than 24 hours counts as stale. The limit of
+15 assets keeps a widely shared connection or table from turning one edit into a review of the
+whole workspace: beyond it a person chooses.
+
+A stamp without a comparison makes the next reader trust a doc nobody read, which is worse than
+no stamp. That is why only what was really compared is stamped, and why `stamp` is not among the
+commands a harness may run without asking.
 
 ## Working cache
 

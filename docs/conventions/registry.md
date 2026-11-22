@@ -21,6 +21,7 @@ the registry is right. After an edit of the registry run `scripts/check_data.py`
   "app_url": "https://app.workato.com",
   "company_domains": ["acme.example"],
   "lint_literal_patterns": {"ERP host": "erp\\.acme\\.example"},
+  "lint_prose_patterns": {"the old order system": "\\blegacy erp\\b"},
   "notes": "",
   "environments": {
     "dev": {"profile": "acme-dev", "workspace": "Acme (Dev)"},
@@ -33,7 +34,7 @@ the registry is right. After an edit of the registry run `scripts/check_data.py`
       "dev": {"project_id": 1001, "folder_id": 2001},
       "prod": {"project_id": 1002, "folder_id": 2002},
       "dev_only_properties": [],
-      "lint_checks": ["NO_GUARD_PROPERTY"],
+      "lint_checks": ["NO_GUARD_PROPERTY", "JOB_VIEW"],
       "lint_guard_property": "protected_accounts",
       "lint_guard_parameter": "(^|_)account_id$",
       "lint_guard_exempt": [],
@@ -87,6 +88,7 @@ Dev only. This example passes `scripts/check_data.py`.
 | `app_url` | https address | no; default `https://app.workato.com` | the address of the Workato web app of the workspace's data center: the plain https address of a host below `workato.com` or `workatoapp.cn`, with no path, port, query or user. Otherwise `check_data.py` and `sync_harness.py` refuse it: "app_url must be the https address of a Workato web app". Used for links and for the Workato MCP server's address, never to send a token. The Workato MCP server is left out for the China address, `https://app.workatoapp.cn` | `wkrepo.app_url()` (links in `lint_recipes.py`, `build_index.py`, `prod_drift.py`, `prod_jobs_report.py`); `sync_harness.py` (fills `{app_url}` in `.agents/mcp.json`) |
 | `company_domains` | list of lower-case domains | no | e-mail domains of the company. A hardcoded address in one of them is a lint finding | `lint_recipes.py` (`MAGIC_LITERAL`); `check_kit_files.py` (`NAME`) |
 | `lint_literal_patterns` | object: label to regular expression | no | more hardcoded values the lint reports, besides a Slack channel id and a URL. A value that is not a regular expression is an error | `lint_recipes.py` (`MAGIC_LITERAL`) |
+| `lint_prose_patterns` | object: label to regular expression | no | words that do not belong in the text people read in Workato: the lint reports a recipe description, a step comment or a comment line of a code step that matches, as "the description holds <label>". Letter case is ignored. Typical entries: the name of a system the recipes replaced, the name of a test account. A value that is not a regular expression is an error | `lint_recipes.py` (`PROSE_PATTERN`) |
 | `environments` | object | yes | exactly `dev` and `prod`; see below | every script that reaches Workato |
 | `projects` | object: slug to project | yes | every registered project; see below | most scripts |
 | `notes` | text | no | free text for people | no script |
@@ -131,11 +133,11 @@ the kit owns.
 | `prod` | object | when `snapshots` is true | the same for Prod | `sync_recipes.py`, `prod_drift.py`, `doctor.py` |
 | `shared_connections` | boolean | no | `true` for the one project that holds the connections other projects use. `prod_drift.py` reports a Dev binding to a connection outside the recipe's own project and this one. Observed: a deployment leaves the Prod slot of any other connection empty | `prod_drift.py` (`BINDING`) |
 | `dev_only_properties` | list of names | no | project properties that may be missing in Prod, for example one that only a Dev test needs | `prod_drift.py` |
-| `lint_checks` | list of names | no | extra lint checks for this project: `ACCOUNT_PROPERTY` (a pill on a workspace account property instead of a project property), `NO_GUARD_PROPERTY` (see the next two keys). Another name is an error | `lint_recipes.py` |
+| `lint_checks` | list of names | no | extra lint checks for this project: `ACCOUNT_PROPERTY` (a pill on a workspace account property instead of a project property), `NO_GUARD_PROPERTY` (see the next two keys) and `JOB_VIEW` (the job report of each recipe: missing, or a column that reads a step that is gone or has data masking; see [job-view.md](job-view.md)). Another name is an error | `lint_recipes.py` |
 | `lint_guard_property` | text | when `lint_checks` holds `NO_GUARD_PROPERTY` | the project property that lists the records automation must not touch, for example `protected_accounts` | `lint_recipes.py` |
 | `lint_guard_parameter` | regular expression | when `lint_checks` holds `NO_GUARD_PROPERTY` | the parameter names that need the guard, for example `(^\|_)account_id$`. `NO_GUARD_PROPERTY` reports a recipe function that takes a parameter whose name matches, acts on something and never reads `lint_guard_property`: "takes '<parameter>' but never reads <property>". A value that is not a regular expression is an error | `lint_recipes.py` |
 | `lint_guard_exempt` | list of recipe names | no | recipe functions the guard check skips, because their only caller reads the property first | `lint_recipes.py` |
-| `tables` | object: table id (as text) to name | no | the tables (data tables, and lookup tables if you want them) whose id the recipe index looks for in recipe JSON. A recipe's index entry lists under `tables` the ones it holds, and a lookup table's description lists as "Used by" the documented recipes whose entry names it | `build_index.py`; `sync_lookup_tables.py` reads the result from the index |
+| `tables` | object: table id (as text) to name | no | names for the tables of the project (data tables, and lookup tables if you want them). The recipe index looks for each id anywhere in the recipe JSON and lists the table by this name; a table that is not named here is still listed, as `data table <id>` or `lookup table <id>`, where a step of that kind holds its id. `doc_sync.py` shows the name in a plan | `build_index.py`, `doc_sync.py`; `sync_lookup_tables.py` reads the result from the index |
 | `confluence_main_page` | text | no | the project's main Confluence page, for the optional Atlassian integration | no script |
 | `jira` | text | no | where the project's work is tracked in Jira, for the optional Atlassian integration | no script |
 | `notes` | text | no | free text for people | no script |
@@ -191,6 +193,7 @@ changes, it prints every permission rule it adds or removes, one per line, for e
 |---|---|---|
 | `wklintrc.json` | replaces the kit's `scripts/wklintrc.json` as the configuration of `wk lint` | `lint_recipes.py` |
 | `inventory/recipes.json` | optional, kept by hand: a list of objects with `recipe_id` and any of `name`, `path`, `severity`, `owner`, which fills what a recipe doc leaves empty | `build_index.py` |
+| `inventory/doc-sync.json` | generated, never edited by hand: when the doc of each asset was last compared with Workato | `doc_sync.py` (`stamp` writes it) |
 | `notes/<skill-name>.md` | what this workspace adds to a skill of the kit: names of its shared connections, its release order, where its wiki pages live. Every skill ends by pointing at its file | agents, when they load the skill |
 
 ## Environment variables

@@ -31,6 +31,7 @@ from lib.wkrepo import Json
 
 ROOT = wkrepo.ROOT
 EMPTY = "Not documented yet."
+DATA_TABLE_ENTRY = "data table "  # how scripts/build_index.py lists a data table by its id
 UNTITLED = re.compile(r"Untitled column \d+")
 PERSONAL_FIELD = re.compile(r"e-?mail|user", re.IGNORECASE)
 PURPOSE = re.compile(r"^## Purpose\n\n(.*?)\n\n## Fields", re.DOTALL | re.MULTILINE)
@@ -76,6 +77,8 @@ def used_by(table: Json, index: list[Json]) -> list[tuple[str, str]]:
     for entry in index:
         for item in entry.get("tables") or []:
             text = item if isinstance(item, str) else json.dumps(item)
+            if text.startswith(DATA_TABLE_ENTRY):
+                continue  # a data table has ids of its own: the same number is another table
             named = by_id.search(text) or table["name"].lower() in text.lower()
             if named and entry.get("doc"):
                 found[entry["recipe_id"]] = (str(entry["name"]).strip('"'), entry["doc"])

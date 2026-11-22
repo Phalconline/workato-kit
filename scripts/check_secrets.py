@@ -13,7 +13,6 @@ Exit status: 0 when nothing is found, 1 otherwise.
 
 import json
 import re
-import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -55,14 +54,7 @@ SHOWN_PATH_LENGTH = 60
 
 def candidate_files() -> list[Path]:
     """Return every file git tracks or would track."""
-    listed = subprocess.run(
-        [wkrepo.executable("git"), "ls-files", "-co", "--exclude-standard", "-z"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return [ROOT / path for path in listed.stdout.split("\0") if path]
+    return [ROOT / path for path in wkrepo.tracked_files()]
 
 
 def is_literal(value: str) -> bool:

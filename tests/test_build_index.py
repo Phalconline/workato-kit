@@ -181,12 +181,32 @@ class BuildTests(unittest.TestCase):
         longer = copy.deepcopy(CALLER)
         longer["code"]["block"][2]["input"]["table_id"] = "9" + TABLE_ID
         support.write_json(self.dev / "sales-orders" / "3001-new-order.recipe.json", longer)
-        self.assertEqual(self.built()[3001]["tables"], [])
+        self.assertEqual(self.built()[3001]["tables"], ["data table 9" + TABLE_ID])
 
-    def test_without_tables_in_the_registry_no_table_is_looked_for(self):
+    def test_a_table_the_registry_does_not_name_is_listed_by_the_step_that_uses_it(self):
         support.write_json(wkrepo.registry_path(), support.REGISTRY)
         self.assertEqual(build_index.registry_tables(), {})
-        self.assertEqual(self.built()[3001]["tables"], [])
+        self.assertEqual(self.built()[3001]["tables"], [f"data table {TABLE_ID}"])
+
+    def test_table_steps_are_read_once_each_and_only_with_an_id(self):
+        steps: list[dict[str, Any]] = [
+            {"provider": "lookup_table", "input": {"lookup_table_id": 5002}},
+            {"provider": "lookup_table", "input": {"lookup_table_id": "5002"}},
+            {"provider": "lookup_table", "input": {"lookup_table_id": "#{_dp('pill')}"}},
+            {"provider": "workato_db_table", "input": {"table_id": TABLE_ID}},
+            {"provider": "workato_db_table", "input": "not an object"},
+            {"provider": "erp", "input": {"table_id": "77"}},
+        ]
+        named = {TABLE_ID: f"Orders cache ({TABLE_ID})"}
+        blob = json.dumps(steps)
+        self.assertEqual(
+            build_index.tables_used(steps, blob, named),
+            [f"Orders cache ({TABLE_ID})", "lookup table 5002"],
+        )
+        self.assertEqual(
+            build_index.tables_used(steps, blob, {}),
+            ["lookup table 5002", f"data table {TABLE_ID}"],
+        )
 
     def test_a_verdict_in_a_doc_wins_over_the_one_carried_over(self):
         self.doc("sales-orders", 3001, "new-order", extra="verdict: Merge\n")

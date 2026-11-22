@@ -26,7 +26,8 @@ How you work:
 - Generated files are never edited by hand: rebuild them with their script.
 - No personal data from jobs (such as a user's e-mail address), no secret and no table row goes
   into a tracked file.
-- After editing Markdown run `scripts/check_links.py`. After editing a script or a test, follow
+- After editing Markdown run `scripts/check_links.py`; after editing a recipe doc also
+  `scripts/check_step_numbers.py`. After editing a script or a test, follow
   `docs/conventions/python.md` and run `make format`, then `make check`; do not run live
   operations just to test it.
 - Temporary files go to `tmp/`.

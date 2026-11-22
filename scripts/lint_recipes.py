@@ -23,6 +23,16 @@ What is reported:
   channel id, a URL, an e-mail address of the company (the registry names its domains under
   `company_domains`) and whatever the registry adds under `lint_literal_patterns`.
 - UNFINISHED_STEP and SKIPPED_STEP.
+- UNMASKED_CREDENTIAL: a step without "Mask data" that carries a credential by name (rule
+  "Sensitive data stays out of job history" of AGENTS.md): an input field, a request header or
+  parameter, a datapill, the output a code step declares or a parameter of a recipe function,
+  named like a password, a passcode, a secret, an API key, an Authorization header or an access
+  token. Only names are read, never values. A bare "token" is not reported: list actions name
+  their paging tokens that way. A warning: a name tells what a field is called, not what it
+  holds.
+- PROSE_PATTERN: a recipe description, a step comment or a comment line of a code step that
+  matches a pattern the registry lists under `lint_prose_patterns`: a word that does not belong
+  in the text people read in Workato, for example the name of a system the recipe replaced.
 - Only for a project that names the check under `lint_checks` in the registry:
   ACCOUNT_PROPERTY: a pill on a workspace account property instead of a project property;
   NO_GUARD_PROPERTY: a recipe function that takes a parameter whose name matches the project's
@@ -30,6 +40,10 @@ What is reported:
   something and never reads the property the project names with `lint_guard_property`: the list
   of records that automation must not touch. Skipped for a stub that only logs and returns, and
   for the functions listed under `lint_guard_exempt`: their only caller runs the guard first.
+  JOB_VIEW: the columns of the Jobs tab (docs/conventions/job-view.md). JOB_VIEW_MISSING warns
+  when the recipe has no job report; JOB_VIEW_STALE is an error when a column reads a step that
+  is not in the recipe, JOB_VIEW_MASKED when it reads a step with data masking, which Workato
+  blocks.
 
 Step numbers are Workato UI numbers (the JSON indexes the trigger as 0, so +1).
 
@@ -91,6 +105,35 @@ PROPERTY_PILL = re.compile(
 PROJECT_CHECKS = frozenset(wkrepo.LINT_CHECKS)
 # NO_GUARD_PROPERTY: the providers of a step that acts on nothing.
 PASSIVE_PROVIDERS = (None, "workato_recipe_function", "logger")
+# UNMASKED_CREDENTIAL: field names that mean a credential. A bare "token" is left out, because
+# list actions name their paging tokens that way.
+CREDENTIAL = re.compile(
+    r"password|passcode|passwd|secret|api[_-]?key|private[_-]?key|authorization"
+    r"|(?:access|auth|refresh|id|bearer|api|session)[_-]?token",
+    re.IGNORECASE,
+)
+# A name like `requirePassword` or `password_policy` is a setting about a credential, not one.
+CREDENTIAL_SETTING = re.compile(
+    r"^(?:require|has|is|force|must|need|reset|change|expire|enable|allow)"
+    r"|(?:policy|expired|expires|changed|required|reset|length|age|hint|strength)$",
+    re.IGNORECASE,
+)
+# The field names on the path of a datapill, as Workato stores a pill inside a string.
+PILL_PATH = re.compile(r'\\*"path\\*"\s*:\s*\[([^\]]*)\]')
+PATH_SEGMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_ -]*")
+# A request header or parameter is a list item: {"header": <name>, "value": ...}.
+NAMED_ITEM_KEYS = ("header", "param")
+# Inputs that hold a schema a person wrote: the output of a code step, a function's parameters.
+DECLARED_SCHEMAS = ("code_output_schema_json", "parameters_schema_json")
+SCHEMA_NAME = re.compile(r'"name"\s*:\s*"([^"]+)"')
+SHOWN_CREDENTIAL_FIELDS = 3
+# JOB_VIEW: the step a job report column reads, in the two datapill forms Workato stores.
+JOB_VIEW_PILL = re.compile(r"_\('data\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)")
+JOB_VIEW_DP = re.compile(
+    r'\\*"provider\\*"\s*:\s*\\*"([^"\\]+)\\*"\s*,\s*\\*"line\\*"\s*:\s*\\*"([^"\\]+)'
+)
+# PROSE_PATTERN: how a comment line starts in the code of a Ruby, Python or JavaScript step.
+CODE_COMMENT = ("#", "//")
 
 
 @dataclass(frozen=True)
@@ -103,6 +146,7 @@ class Settings:
     guard_exempt: frozenset[str] = frozenset()  # recipe names the guard check skips
     company_domains: tuple[str, ...] = ()  # e-mail domains that count as hardcoded addresses
     extra_literals: tuple[tuple[str, str], ...] = ()  # (label, regular expression) pairs
+    prose_patterns: tuple[tuple[str, str], ...] = ()  # the same, for descriptions and comments
 
 
 class Finding(NamedTuple):
@@ -265,6 +309,56 @@ def step_findings(code: Json, patterns: Literals) -> list[Finding]:
     return found
 
 
+def credential_fields(step: Json) -> list[str]:
+    """Return the names under which a step carries or declares a credential.
+
+    Read from the input of the step: a field, a request header or parameter with a value, the
+    path of a datapill, and the schema a person wrote for a code step's output or a function's
+    parameters. Values are never read.
+    """
+    found: set[str] = set()
+
+    def credential(name: str) -> bool:
+        return bool(CREDENTIAL.search(name)) and not CREDENTIAL_SETTING.search(name.strip())
+
+    def visit(value: Any, key: str | None = None) -> None:
+        if isinstance(value, dict):
+            named = [value[name] for name in NAMED_ITEM_KEYS if isinstance(value.get(name), str)]
+            if named and credential(named[0]) and str(value.get("value") or "").strip():
+                found.add(named[0])
+            for child_key, child in value.items():
+                visit(child, child_key)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item, key)
+        elif isinstance(value, str) and value.strip():
+            if key and key not in DECLARED_SCHEMAS and credential(key):
+                found.add(key)
+            for path in PILL_PATH.findall(value):
+                found.update(part for part in PATH_SEGMENT.findall(path) if credential(part))
+
+    step_input = step.get("input")
+    if not isinstance(step_input, dict):
+        return []
+    visit(step_input)
+    for schema in DECLARED_SCHEMAS:
+        names = SCHEMA_NAME.findall(str(step_input.get(schema) or ""))
+        found.update(name for name in names if credential(name))
+    return sorted(found)
+
+
+def unmasked_credentials(code: Json) -> list[Finding]:
+    """Report every step that carries a credential by name and has no data masking."""
+    found = []
+    for step in steps(code):
+        fields = [] if step.get("mask_data") is True else credential_fields(step)
+        if fields:
+            shown = ", ".join(repr(field) for field in fields[:SHOWN_CREDENTIAL_FIELDS])
+            message = f"carries {shown} and is not masked"
+            found.append(Finding("warn", "UNMASKED_CREDENTIAL", ui_step(step), message))
+    return found
+
+
 def guard_property_check(recipe: Json, text: str, settings: Settings) -> list[Finding]:
     """Check that a recipe function which takes a guarded parameter reads the guard property.
 
@@ -289,6 +383,67 @@ def guard_property_check(recipe: Json, text: str, settings: Settings) -> list[Fi
     return []
 
 
+def job_view_findings(code: Json) -> list[Finding]:
+    """Check the job report: there is one, and every column reads a step that exists unmasked."""
+    config = code.get("job_report_config") or {}
+    if not config:
+        message = "no job report: the Jobs tab shows no columns of its own for this recipe"
+        return [Finding("warn", "JOB_VIEW_MISSING", None, message)]
+    blocks = {block.get("as"): block for block in steps(code)}
+    labels = {item.get("name"): item.get("label") for item in code.get("job_report_schema") or []}
+    found = []
+    for column, value in sorted(config.items()):
+        label = labels.get(column) or column
+        text = str(value)
+        read = {
+            line for _provider, line in JOB_VIEW_PILL.findall(text) + JOB_VIEW_DP.findall(text)
+        }
+        for line in sorted(read):
+            block = blocks.get(line)
+            if block is None:
+                message = f"column {label!r} reads step {line!r}, which is not in the recipe"
+                found.append(Finding("error", "JOB_VIEW_STALE", None, message))
+            elif block.get("mask_data") is True:
+                message = f"column {label!r} reads a step with data masking, which Workato blocks"
+                found.append(Finding("error", "JOB_VIEW_MASKED", ui_step(block), message))
+    return found
+
+
+def prose_patterns(settings: Settings) -> Literals:
+    """Return the patterns that a description or a comment must not match."""
+    patterns = []
+    for label, expression in settings.prose_patterns:
+        try:
+            patterns.append((label, re.compile(expression, re.IGNORECASE)))
+        except re.error:
+            raise cli.Error(
+                f"lint_prose_patterns in the registry: '{label}' is not a regular expression"
+            ) from None
+    return patterns
+
+
+def prose_findings(recipe: Json, patterns: Literals) -> list[Finding]:
+    """Report a description, a step comment or a code comment that matches a prose pattern."""
+    if not patterns:
+        return []
+    found = []
+
+    def check(text: object, where: str, number: int | None) -> None:
+        for label, pattern in patterns:
+            if pattern.search(str(text or "")):
+                found.append(Finding("warn", "PROSE_PATTERN", number, f"{where} holds {label}"))
+
+    check(recipe.get("description"), "the description", None)
+    for step in steps(recipe["code"]):
+        number = ui_step(step)
+        check(step.get("comment"), "the step comment", number)
+        code = (step.get("input") or {}).get("code")
+        if isinstance(code, str):
+            lines = [line for line in code.splitlines() if line.strip().startswith(CODE_COMMENT)]
+            check("\n".join(lines), "a comment in the code", number)
+    return found
+
+
 def house_checks(
     recipe: Json, properties: set[str] | None, settings: Settings | None = None
 ) -> list[Finding]:
@@ -303,8 +458,12 @@ def house_checks(
     text = json.dumps(recipe)
     found = property_findings(text, properties, settings.checks)
     found += step_findings(recipe["code"], literal_patterns(settings))
+    found += unmasked_credentials(recipe["code"])
+    found += prose_findings(recipe, prose_patterns(settings))
     if "NO_GUARD_PROPERTY" in settings.checks:
         found += guard_property_check(recipe, text, settings)
+    if "JOB_VIEW" in settings.checks:
+        found += job_view_findings(recipe["code"])
     return found
 
 
@@ -333,6 +492,7 @@ def project_settings(slug: str) -> Settings:
         guard_exempt=frozenset(project.get("lint_guard_exempt", [])),
         company_domains=tuple(wkrepo.company_domains()),
         extra_literals=tuple(wkrepo.registry().get("lint_literal_patterns", {}).items()),
+        prose_patterns=tuple(wkrepo.registry().get("lint_prose_patterns", {}).items()),
     )
 
 

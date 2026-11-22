@@ -16,6 +16,94 @@ scripts/sync_harness.py
 make check
 ```
 
+## Unreleased: after the first version
+
+What a workspace learned in its first weeks on these rules, brought back to the kit.
+
+- **Docs in step with Workato.** New rule **Sync the docs around a recipe** and new script
+  `scripts/doc_sync.py`: `plan` lists a recipe, what it calls, its connections and tables and
+  what shares them, each with its doc and whether the doc is stale; `stamp` records in
+  `inventory/doc-sync.json` that a doc was compared with the live asset; `status` audits every
+  recipe doc. Claude Code may run `plan` and `status` without asking, never `stamp`.
+- **Step numbers are checked.** New script `scripts/check_step_numbers.py`, part of
+  `make check`: it fails on "step 12" in a recipe doc and on a numbered list that does not count
+  from 1 in a row.
+- **The Jobs view.** New rule **A recipe has a Jobs view** and new page
+  `docs/conventions/job-view.md`: a recipe gets a job report (the columns of its Jobs tab) with
+  its first push, reviewed after every edit. New lint check `JOB_VIEW` for a project that lists
+  it under `lint_checks`: `JOB_VIEW_MISSING`, `JOB_VIEW_STALE` and `JOB_VIEW_MASKED`.
+- **Data masking.** New rule **Sensitive data stays out of job history** and new page
+  `docs/conventions/data-masking.md`: a credential is masked in every step it passes through and
+  never sent where a mask does not reach; personal data of people outside the organization is
+  masked by default, unless the recipe doc says why it stays readable. New lint finding
+  `UNMASKED_CREDENTIAL`, a warning, for a step that carries a credential by name and has no
+  mask. The recipe doc template gains a "Masked steps" line.
+- **Descriptions and comments describe the recipe as it is.** The rule **A description
+  describes** now also keeps comparisons with an older version or a replaced system out of
+  descriptions and comments. New registry key `lint_prose_patterns` and lint finding
+  `PROSE_PATTERN` for the words a workspace does not want there.
+- **Rows of a data table.** `scripts/wk_api.py --data-tables` calls the record API of data
+  tables on the `data-tables` host of the profile's data center: a query reads, and creating,
+  changing or deleting a record needs `--write`. No permission rule lets it run without asking.
+- **Tables in the recipe index.** `scripts/build_index.py` now lists every table that a data
+  table step or a lookup table step names by its id, as `data table <id>` or `lookup table <id>`,
+  not only the tables the registry names. The "Used by" list of a lookup table therefore fills
+  without an entry in the registry.
+- **Skills.** `workato-recipe-edit`: the doc sync plan before an edit and the stamp after it, the
+  job report, and no reliance on the `version` that `wk recipes get` shows. `recipe-docs`: the
+  doc sync procedure. `workato-assets`: tags as part of a build where the workspace's rules say
+  so, the record API, and what a column change keeps. `workato-prod-deploy`: what was observed at
+  deployments (recipes restarted, a recipe left stopped, the second connection slot of one
+  connector left empty) and the comparison of the run state afterwards.
+  `confluence-recipe-pages`: a published page follows Prod, for every change that reaches Prod.
+- **Roles.** `architect`: a plan for a new recipe, or for a change to the steps of one, names
+  the columns of its Jobs tab.
+- **Checks outside a git clone.** `check_data.py`, `check_secrets.py` and `check_kit_files.py`
+  read the files git knows. In a folder that is no git clone, an unpacked archive for example,
+  they now stop with one line that says so, instead of a traceback.
+- **Platform notes.** Uploading a webhook trigger and a job report as raw JSON
+  (`recipe-builder-traps.md`); switching from a webhook recipe to its replacement by recipe state
+  (`platform-notes-queueing.md`).
+
+### What a workspace repository must do
+
+After the merge, besides the usual two steps:
+
+1. `scripts/sync_harness.py` adds three allow rules to `.claude/settings.json`:
+   `Bash(scripts/check_step_numbers.py *)`, `Bash(scripts/doc_sync.py plan *)` and
+   `Bash(scripts/doc_sync.py status *)`. Read the lines it prints before you commit.
+2. `make check` now fails on a step number in a recipe doc. List the findings and rewrite each
+   one to say what the step does:
+
+   ```bash
+   scripts/check_step_numbers.py
+   ```
+
+3. Rebuild the recipe index and the lookup-table descriptions, because `tables` of an index
+   entry gains the tables found by their steps:
+
+   ```bash
+   scripts/sync_recipes.py dev
+   ```
+
+   ```bash
+   scripts/build_index.py
+   ```
+
+   ```bash
+   scripts/sync_lookup_tables.py
+   ```
+
+4. The stamps start empty, so the first `scripts/doc_sync.py status` lists every recipe doc as
+   never synced. Do not stamp them in bulk: a stamp says a doc was compared. Compare and stamp
+   the docs around each recipe as you work on it, as the new rule says.
+5. `scripts/lint_recipes.py` may now warn `UNMASKED_CREDENTIAL` on recipes you already have.
+   A warning does not fail the run. Read each one: mask the step (the recipe must be stopped
+   for that, so it needs a request), or note in the recipe doc why the name is no credential.
+6. Optional, in the registry: add `JOB_VIEW` to `lint_checks` of a project once its recipes have
+   job reports, and list under `lint_prose_patterns` the words you do not want in descriptions
+   and comments (`docs/conventions/registry.md`).
+
 ## Unreleased: first version
 
 The first version of the kit. It holds:

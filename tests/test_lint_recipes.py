@@ -19,6 +19,9 @@ GUARD_PARAMETER = r"(^|_)account_id$"
 GUARDED = lint.Settings(
     checks=frozenset({"NO_GUARD_PROPERTY"}), guard_property=GUARD, guard_parameter=GUARD_PARAMETER
 )
+JOB_VIEW = lint.Settings(checks=frozenset({"JOB_VIEW"}))
+# A datapill in the builder's form that reads the step `get_customer_3c4d`.
+CUSTOMER_PILL = {"pill_type": "output", "provider": "erp", "line": "get_customer_3c4d"}
 # A Slack channel id has the shape C or G plus eight to eleven capitals and digits.
 CHANNEL = "C0ABC12DEF"
 ACTING = {"provider": "erp", "name": "create_invoice", "input": {"id": "x"}}
@@ -49,6 +52,18 @@ def function(*steps, parameters=("account_id",), name=FUNCTION_NAME):
 
 def rules(findings):
     return [(finding.level, finding.rule, finding.step) for finding in findings]
+
+
+def output_pill(*path):
+    """Return a datapill on the output of an earlier step, as Workato stores it in a string."""
+    stored = {"pill_type": "output", "provider": "erp", "line": "request_1", "path": list(path)}
+    return "#{_dp('" + json.dumps(stored).replace('"', '\\"') + "')}"
+
+
+def unmasked(*steps, trigger=None):
+    """Return the UNMASKED_CREDENTIAL findings of a recipe made of the given steps."""
+    found = lint.house_checks(recipe(*steps, trigger=trigger), set())
+    return [finding for finding in found if finding.rule == "UNMASKED_CREDENTIAL"]
 
 
 def labels(findings):
@@ -193,6 +208,131 @@ class HouseCheckTests(unittest.TestCase):
             rules(found), [("error", "UNFINISHED_STEP", 2), ("warn", "SKIPPED_STEP", 3)]
         )
 
+    def test_a_step_that_carries_a_credential_by_name_must_be_masked(self):
+        header = {"header": "Authorization", "value": "Bearer " + output_pill("body", "x")}
+        carriers: dict[str, dict[str, Any]] = {
+            "an input field": {"input": {"data": {"passwordProfile": {"password": "x"}}}},
+            "a request header": {"input": {"request": {"headers": [header]}}},
+            "a form parameter": {
+                "input": {"request": {"form_body": [{"param": "client_secret", "value": "x"}]}}
+            },
+            "a datapill": {"input": {"body": "pin " + output_pill("output", "passcode")}},
+            "the output a code step declares": {
+                "input": {"code_output_schema_json": json.dumps([{"name": "temp_password"}])}
+            },
+            "an access token": {"input": {"access_token": output_pill("body", "access_token")}},
+        }
+        for case, step in carriers.items():
+            with self.subTest(case=case):
+                self.assertEqual(
+                    rules(unmasked({"provider": "erp", **step})),
+                    [("warn", "UNMASKED_CREDENTIAL", 2)],
+                )
+                self.assertEqual(unmasked({"provider": "erp", "mask_data": True, **step}), [])
+
+    def test_the_finding_names_the_fields_and_never_a_value(self):
+        step = {
+            "provider": "erp",
+            "input": {"password": "Tr0ub4dor", "api_key": "k-123", "user": "someone"},
+        }
+        (finding,) = unmasked(step)
+        self.assertEqual(finding.message, "carries 'api_key', 'password' and is not masked")
+        self.assertNotIn("Tr0ub4dor", finding.message)
+
+    def test_a_function_that_takes_a_credential_is_reported_at_its_trigger(self):
+        found = lint.house_checks(function(parameters=("account_id", "temp_password")), set())
+        self.assertIn(("warn", "UNMASKED_CREDENTIAL", 1), rules(found))
+
+    def test_names_that_are_no_credential_are_left_alone(self):
+        quiet: tuple[dict[str, Any], ...] = (
+            {"input": {"continuation_token": "abc", "page_token": "abc", "token": "abc"}},
+            {"input": {"requirePassword": "true", "password_policy": "strict"}},
+            {"input": {"passwordChanged": output_pill("profile", "password_changed")}},
+            {"input": {"password": "", "api_key": None}},  # an empty field carries nothing
+            {"input": {"request": {"headers": [{"header": "Accept", "value": "text/plain"}]}}},
+            {"input": {"request": {"headers": [{"header": "Authorization", "value": ""}]}}},
+            {"comment": "Sends the password by e-mail.", "input": {"to": "x"}},
+        )
+        for step in quiet:
+            with self.subTest(step=step):
+                self.assertEqual(unmasked({"provider": "erp", **step}), [])
+        self.assertEqual(lint.credential_fields({"input": "password"}), [])  # no fields to read
+        self.assertEqual(lint.credential_fields({}), [])
+
+    def test_a_recipe_without_a_job_report_is_a_warning_where_the_project_asks(self):
+        bare = recipe({"provider": "erp", "as": "create_invoice_1a2b"})
+        self.assertEqual(lint.house_checks(bare, set()), [])  # the check is per project
+        found = lint.house_checks(bare, set(), JOB_VIEW)
+        self.assertEqual(rules(found), [("warn", "JOB_VIEW_MISSING", None)])
+
+    def test_job_report_columns_must_read_steps_that_exist_unmasked(self):
+        trigger: dict[str, Any] = {
+            "as": "new_order_0f1e",
+            "job_report_schema": [
+                {"name": "custom_column_1", "label": "Order"},
+                {"name": "custom_column_2", "label": "Invoice"},
+                {"name": "custom_column_3", "label": "Customer"},
+            ],
+            "job_report_config": {
+                "custom_column_1": "#{_('data.erp.new_order_0f1e.order_id')}",
+                "custom_column_2": "#{_('data.erp.create_invoice_1a2b.number')} of "
+                "#{_('data.erp.gone_9c9c.total')}",
+                "custom_column_3": "#{_dp('" + json.dumps(CUSTOMER_PILL) + "')}",
+            },
+        }
+        steps: tuple[dict[str, Any], ...] = (
+            {"provider": "erp", "as": "create_invoice_1a2b"},
+            {"provider": "erp", "as": "get_customer_3c4d", "mask_data": True},
+        )
+        found = lint.house_checks(recipe(*steps, trigger=trigger), set(), JOB_VIEW)
+        self.assertEqual(
+            rules(found), [("error", "JOB_VIEW_STALE", None), ("error", "JOB_VIEW_MASKED", 3)]
+        )
+        self.assertIn("column 'Invoice' reads step 'gone_9c9c'", found[0].message)
+        self.assertIn("column 'Customer' reads a step with data masking", found[1].message)
+        steps[1].pop("mask_data")
+        trigger["job_report_config"]["custom_column_2"] = "#{_('data.erp.create_invoice_1a2b.n')}"
+        self.assertEqual(lint.house_checks(recipe(*steps, trigger=trigger), set(), JOB_VIEW), [])
+
+    def test_a_column_without_a_label_is_named_by_its_key_and_text_alone_reads_no_step(self):
+        trigger = {"job_report_config": {"custom_column_1": "#{_('data.erp.gone_9c9c.total')}"}}
+        found = lint.house_checks(recipe(trigger=trigger), set(), JOB_VIEW)
+        self.assertIn("column 'custom_column_1' reads step 'gone_9c9c'", found[0].message)
+        trigger = {"job_report_config": {"custom_column_1": "web shop"}}
+        self.assertEqual(lint.house_checks(recipe(trigger=trigger), set(), JOB_VIEW), [])
+
+    def test_a_prose_pattern_is_looked_for_in_descriptions_and_comments_only(self):
+        settings = lint.Settings(prose_patterns=(("the old ERP", r"\blegacy erp\b"),))
+        told = recipe(
+            {"provider": "erp", "comment": "Same rounding as the Legacy ERP."},
+            {"provider": "erp", "input": {"code": "# as the legacy ERP did\ntotal = 1"}},
+            {"provider": "erp", "input": {"code": "  // legacy erp\nlet total = 1;"}},
+        )
+        told["description"] = "Replaces the legacy ERP export."
+        found = lint.house_checks(told, set(), settings)
+        self.assertEqual(
+            rules(found),
+            [
+                ("warn", "PROSE_PATTERN", None),
+                ("warn", "PROSE_PATTERN", 2),
+                ("warn", "PROSE_PATTERN", 3),
+                ("warn", "PROSE_PATTERN", 4),
+            ],
+        )
+        self.assertEqual(found[0].message, "the description holds the old ERP")
+        self.assertEqual(found[1].message, "the step comment holds the old ERP")
+        self.assertEqual(found[2].message, "a comment in the code holds the old ERP")
+        quiet = recipe(
+            {"provider": "erp", "input": {"note": "legacy erp", "code": "x = 'legacy erp'"}}
+        )
+        self.assertEqual(lint.house_checks(quiet, set(), settings), [])
+        self.assertEqual(lint.house_checks(told, set()), [])  # no pattern, no finding
+
+    def test_a_prose_pattern_that_is_not_a_regular_expression_stops_the_run(self):
+        settings = lint.Settings(prose_patterns=(("broken", "ERP("),))
+        with self.assertRaisesRegex(cli.Error, "lint_prose_patterns.*'broken'"):
+            lint.house_checks(recipe(), set(), settings)
+
     def test_a_function_that_takes_a_guarded_parameter_must_read_the_guard_property(self):
         unguarded = function(ACTING)
         self.assertEqual(lint.house_checks(unguarded, set()), [])  # the check is per project
@@ -251,8 +391,9 @@ class RegistryTests(unittest.TestCase):
     def test_the_registry_switches_checks_on_per_project(self):
         def edit(data):
             data["lint_literal_patterns"] = {"order number": r"SO-\d{4}"}
+            data["lint_prose_patterns"] = {"the old ERP": "legacy erp"}
             data["projects"]["sales-orders"].update(
-                lint_checks=["ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY"],
+                lint_checks=["ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY", "JOB_VIEW"],
                 lint_guard_property=GUARD,
                 lint_guard_parameter=GUARD_PARAMETER,
                 lint_guard_exempt=[FUNCTION_NAME],
@@ -260,11 +401,14 @@ class RegistryTests(unittest.TestCase):
 
         self.change(edit)
         settings = lint.project_settings("sales-orders")
-        self.assertEqual(settings.checks, frozenset({"ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY"}))
+        self.assertEqual(
+            settings.checks, frozenset({"ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY", "JOB_VIEW"})
+        )
         self.assertEqual(settings.guard_property, GUARD)
         self.assertEqual(settings.guard_parameter, GUARD_PARAMETER)
         self.assertEqual(settings.guard_exempt, frozenset({FUNCTION_NAME}))
         self.assertEqual(settings.extra_literals, (("order number", r"SO-\d{4}"),))
+        self.assertEqual(settings.prose_patterns, (("the old ERP", "legacy erp"),))
         self.assertEqual(lint.project_settings("common").checks, frozenset())
 
     def test_the_guard_check_without_its_property_or_parameter_is_refused(self):

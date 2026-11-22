@@ -1,6 +1,6 @@
 ---
 name: recipe-docs
-description: Write or update a recipe document in this repository. Use when documenting a Workato recipe, after changing a recipe, when moving or renaming a recipe doc, or when rebuilding the recipe index. Covers where a doc lives, its template, what a doc must never contain, and how the generated index is rebuilt.
+description: Write or update a recipe document in this repository, and keep the docs around a recipe in step with Workato. Use when documenting a Workato recipe, before and after changing a recipe, when moving or renaming a recipe doc, or when rebuilding the recipe index. Covers where a doc lives, its template, what a doc must never contain, the doc sync plan and its stamps, and how the generated index is rebuilt.
 ---
 
 # Recipe docs in this repository
@@ -31,7 +31,9 @@ behavior**). Read the JSON with `workato-recipe-json`. What you could not read g
 
 - **No step numbers** (**A recipe doc has no step numbers**). Describe what the recipe does, not
   where in the recipe it happens. Step numbers belong in chat and in a changelog, as Workato UI
-  numbers (the JSON indexes the trigger as 0, so add 1).
+  numbers (the JSON indexes the trigger as 0, so add 1). `scripts/check_step_numbers.py`, part
+  of `make check`, fails on "step 12" and on a numbered list that does not count from 1 in a
+  row; a recipe name that holds such a number is not a finding.
 - **No bare id for a called recipe.** Write the recipe's name as a link,
   `[<name>](<app_url>/recipes/<dev recipe id>)` with `app_url` from the registry, then the call
   type (synchronous or asynchronous) and the fields passed. The field names come from the calling
@@ -48,6 +50,52 @@ A decommission proposal states the blast radius (who calls the recipe) before th
 (**A decommission proposal states the blast radius**). Job history shows the callers
 (`workato-job-history`).
 
+## Keep the docs in step with Workato
+
+A doc is only as true as its last comparison with Workato. `scripts/doc_sync.py` makes that
+visible (rule **Sync the docs around a recipe**). What to check around a recipe, a connection or
+a table, and which docs are stale:
+
+```bash
+scripts/doc_sync.py plan <dev recipe id>
+```
+
+After you compared each doc with the live asset:
+
+```bash
+scripts/doc_sync.py stamp recipe:<id> connection:<id>
+```
+
+Every recipe doc whose stamp is missing or outdated:
+
+```bash
+scripts/doc_sync.py status
+```
+
+- `plan` reads Dev only. It covers the recipe, the recipes it calls, its connections, its lookup
+  and data tables (one level down), and the recipes that call it or use one of the same tables.
+  An asset is stale when it was never synced, when Workato changed it since (a recipe's
+  `updated_at`, a connection's name), or when it was synced more than 24 hours ago
+  (`--max-age-hours`). For `connection:<id>`, `lookup_table:<id>` or `data_table:<id>` it lists
+  the recipes that use the asset.
+- Refresh a stale doc from the live asset. A recipe: its raw JSON
+  (`scripts/sync_recipes.py dev --recipe <id>`, then `scripts/render_recipe.py`). A connection:
+  the name Workato shows now, checked in the Configuration section of every doc that names it. A
+  lookup table: `scripts/sync_lookup_tables.py`. A data table: its fields, never its rows. Fix
+  the doc, set `last_reviewed` to today, then stamp it.
+- Stamp only what you compared. A stamp says "this doc matched the asset at that moment". A
+  stamp without a comparison makes the next person trust a doc nobody read.
+- More than 15 assets in a plan (`--limit`): do not refresh them all on your own. Pick the ones
+  the change touches, or ask the person.
+- The stamps are in `workato/workspaces/<workspace>/inventory/doc-sync.json`: generated, one line
+  per asset, never edited by hand, and never in a doc's frontmatter. `last_reviewed` is the date
+  someone last read the doc; the stamp is what the script compares.
+- A doc kept on purpose as the record of a recipe that was deleted in Workato has
+  `deleted: true` in its frontmatter, and `status` leaves it out.
+- The plan lists candidates, not a proof of completeness: a table that a step names by a
+  datapill, a lookup table that a formula reads by name, and a recipe that reaches a table only
+  through another recipe are not in it.
+
 ## Generated index
 
 `docs/recipe-index.md` and `workato/workspaces/<workspace>/inventory/recipes-index.json` are
@@ -62,8 +110,9 @@ scripts/build_index.py
 The index reads the Dev JSON from `tmp/wk/dev/`, because docs carry Dev ids, so refresh that copy
 first. The script takes `name`, `path`, `severity`, `owner`, `last_job` and `verdict` from the
 frontmatter of each doc. From the Dev copy of each managed project it recomputes the trigger, the
-step count, the connectors, the forward calls, `tables` (the tables whose id the registry lists
-under `tables`) and `properties` (the project properties the recipe reads). It keeps the callers
+step count, the connectors, the forward calls, `tables` (the tables the registry names under
+`tables` whose id the recipe holds, and every other table a data table step or a lookup table
+step names by its id) and `properties` (the project properties the recipe reads). It keeps the callers
 (`called_by`) of the current index and adds the forward calls to them, and it carries over untouched
 every key it does not write itself. A project without a Dev copy on your machine keeps its old
 values, and the script says so. To see whether the index is current without writing:

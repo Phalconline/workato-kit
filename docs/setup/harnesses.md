@@ -87,7 +87,8 @@ you commit.
 
 The allowed scripts write files of the repository and of `tmp/`: the Prod copy, the recipe
 index, the lookup-table descriptions, `prod_recipe_id` in recipe docs, lint and comparison
-output. Read `git diff` before you commit. Three allowed commands take an output path:
+output. Read `git diff` before you commit. Of `scripts/doc_sync.py` only `plan` and `status` are
+allowed, which write nothing: `stamp` records that a doc was compared with Workato, so it asks. Three allowed commands take an output path:
 `wk recipes pull` and `wk recipes export` may write with `-o` only below `tmp/` (the guard blocks
 any other path), and `scripts/prod_jobs_report.py --out` refuses a file outside `tmp/`.
 

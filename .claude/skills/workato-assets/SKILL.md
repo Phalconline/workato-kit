@@ -87,24 +87,56 @@ scripts/wk_api.py dev GET /recipes -q folder_id=<folder id> -q 'includes[]=tags'
 
 - Say what changed.
 
+### Tags as part of a build
+
+Assigning a tag is a write to Workato, so by default it needs a request (rule **Change only what
+was asked**). A workspace that wants its tags kept current says so in the last section of
+`AGENTS.md`, "Rules of this workspace", and writes its tag convention into its notes file
+(below). Where it does:
+
+- When you create a recipe, or a change alters what decides its tags (the process it serves, a
+  step that deletes, a system it now writes to), pick its tags by the convention and apply them
+  in the same task, then read the assignments back and say so.
+- When no existing tag fits, create one by the convention's own tests rather than stretching an
+  existing tag, and add it to the convention in the same task.
+- Tags you assign in Dev reach Prod only with a deployment that includes tags; otherwise they are
+  assigned in Prod after the deployment that brings the recipe there (`workato-prod-deploy`).
+
 ## Data tables and lookup tables
 
 - Before changing a data table's columns, truncating or deleting it, or writing or deleting its
   rows outside a recipe, list the recipes that read or write it and say what is destroyed or
-  changed. Search the recipe JSON for the table's id; `tables` of the recipe index names a table
-  only when the registry lists its id.
+  changed. `scripts/doc_sync.py plan data_table:<id>` (or `lookup_table:<id>`) lists the Dev
+  recipes whose steps name the table, and `tables` of the recipe index names it for the
+  documented recipes. Neither finds a table that a step names by a datapill, or a lookup table
+  that a formula reads by name: search the recipe JSON for the table's id and name too.
 - Rows can contain personal data. Never quote a row in chat or in a file beyond what the task
   needs.
-- After a column change, read the table again with `data_table_get`.
+- After a column change, read the table again with `data_table_get`. Observed: a column added
+  through the API (`PUT /data_tables/<id>`, which takes the whole schema) keeps the rows when
+  every existing column is sent with its `field_id`, and a deployment then brings the new column
+  to Prod and leaves the rows of the Prod table alone.
+- Rows from outside a recipe go through the record API of data tables, which lives on a host of
+  its own (documented: <https://docs.workato.com/workato-api/data-tables.html>).
+  `scripts/wk_api.py` reaches it with `--data-tables`; the table is named by the UUID the API
+  shows for it, not by the numeric id a recipe step holds. A query only reads:
+
+```bash
+scripts/wk_api.py dev POST /tables/<uuid>/query --data-tables --json '{"limit": 5}'
+```
+
+  Creating, changing or deleting a row needs `--write` and a request that asks for that change.
+  Read the rows back afterwards, and keep them out of the repository and out of chat.
 - Keep the state of one project in a data table inside that project; a lookup table serves data
   that several projects share.
 - Each lookup table is described in `workato/workspaces/<workspace>/lookup-tables/` (purpose,
   fields, and a "Used by" list), refreshed by `scripts/sync_lookup_tables.py`. "Used by" lists
-  the documented recipes whose index entry names the table, and the index records a table only
-  when the registry lists its id under `tables` of a project. An empty list reads "The recipe
-  index names no documented recipe for this table." and proves nothing: search the recipe JSON
-  for the table's id. Never copy table rows into the repository (rule **No secrets and no table
-  data in the repository**).
+  the documented recipes whose index entry names the table: the index records a lookup table
+  where a lookup table step holds its id, or where the registry names it under `tables` and the
+  recipe holds its id anywhere. An empty list reads "The recipe index names no documented recipe
+  for this table." and proves nothing: a formula can read a table by name, and a recipe without
+  a doc is not in the index. Never copy table rows into the repository (rule **No secrets and no
+  table data in the repository**).
 
 ## Blueprints
 

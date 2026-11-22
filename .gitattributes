@@ -2,6 +2,7 @@
 workato/workspaces/*/projects/**/*.recipe.json    linguist-generated
 workato/workspaces/*/projects/**/index.json       linguist-generated
 workato/workspaces/*/inventory/recipes-index.json linguist-generated
+workato/workspaces/*/inventory/doc-sync.json      linguist-generated
 docs/recipe-index.md        linguist-generated
 .claude/settings.json       linguist-generated
 .claude/skills/**           linguist-generated

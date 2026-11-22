@@ -41,7 +41,6 @@ Exit status: 0 nothing found; 1 at least one finding.
 
 import json
 import re
-import subprocess
 import sys
 import unicodedata
 from collections.abc import Iterator
@@ -96,6 +95,7 @@ EXAMPLE_HOST = re.compile(r"(^|\.)example(\.(com|org|net))?$")
 PUBLIC_HOSTS = {
     "workato.com",
     "app.workatoapp.cn",
+    "data-tables.workatoapp.cn",
     "github.com",
     "raw.githubusercontent.com",
     "docs.github.com",
@@ -158,14 +158,7 @@ def kit_owned(relative: str) -> bool:
 
 def candidate_files() -> list[str]:
     """Return every file git tracks or would track, relative to the repository root."""
-    listed = subprocess.run(
-        [wkrepo.executable("git"), "ls-files", "-co", "--exclude-standard", "-z"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return sorted(path for path in listed.stdout.split("\0") if path)
+    return wkrepo.tracked_files()
 
 
 def public_host(host: str) -> bool:

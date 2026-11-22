@@ -86,6 +86,7 @@ class RegistryTests(unittest.TestCase):
             "app_url": "http://app.workato.com",
             "company_domains": ["Acme.Example"],
             "lint_literal_patterns": {"order number": ""},
+            "lint_prose_patterns": ["legacy erp"],
             "maintainer": 7,
         }
         for key, value in workspace.items():
@@ -125,6 +126,9 @@ class RegistryTests(unittest.TestCase):
         data = self.changed()
         data["lint_literal_patterns"] = {"order number": "SO-("}
         self.refused(data, "lint_literal_patterns")
+        data = self.changed()
+        data["lint_prose_patterns"] = {"the old ERP": "ERP("}
+        self.refused(data, "lint_prose_patterns must map a label to a regular expression")
 
     def test_addresses_and_names_that_reach_a_command_or_a_harness_are_checked(self):
         for url in (
@@ -145,10 +149,11 @@ class RegistryTests(unittest.TestCase):
     def test_every_optional_setting_is_accepted_in_its_right_shape(self):
         data = self.changed()
         data["lint_literal_patterns"] = {"order number": r"SO-\d{4}"}
+        data["lint_prose_patterns"] = {"the old ERP": r"\blegacy erp\b"}
         data["notes"] = "free text"
         data["projects"]["sales-orders"].update(
             dev_only_properties=["orders_channel"],
-            lint_checks=["ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY"],
+            lint_checks=["ACCOUNT_PROPERTY", "NO_GUARD_PROPERTY", "JOB_VIEW"],
             lint_guard_property="protected_accounts",
             lint_guard_parameter=r"(^|_)account_id$",
             lint_guard_exempt=["[SO] LF | Create invoice"],

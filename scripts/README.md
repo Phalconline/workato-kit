@@ -1,6 +1,6 @@
 # scripts/
 
-The tooling of the repository: eighteen commands in Python 3.14 that use the standard library
+The tooling of the repository: twenty commands in Python 3.14 that use the standard library
 only, and their shared code in `lib/`. Run them from the repository root. The ones that read
 Workato also need `wk` and the two profiles of the workspace ([setup](../docs/setup/workato.md)).
 How a script is written and tested is in
@@ -19,6 +19,7 @@ reference; this page is the overview.
 | `prod_jobs_report.py` | reads | Prod, or `--profile` | `tmp/wk/prod-jobs/`, or the `--out` file, which must be under `tmp/` |
 | `sync_lookup_tables.py` | reads | Dev | `workato/workspaces/<workspace>/lookup-tables/` |
 | `wk_api.py` | reads; **writes** with `--write` | the one of the environment given | nothing |
+| `doc_sync.py` | reads | Dev | only `stamp` writes: `workato/workspaces/<workspace>/inventory/doc-sync.json` |
 | `link_prod_ids.py` | no | | the `prod_recipe_id` line of the recipe docs |
 | `build_index.py` | no | | `workato/workspaces/<workspace>/inventory/recipes-index.json`, `docs/recipe-index.md` |
 | `render_recipe.py` | no | | nothing; prints |
@@ -26,6 +27,7 @@ reference; this page is the overview.
 | `check_data.py` | no | | nothing |
 | `check_kit_files.py` | no | | nothing |
 | `check_links.py` | no | | nothing |
+| `check_step_numbers.py` | no | | nothing |
 | `check_secrets.py` | no | | nothing |
 | `sync_harness.py` | no | | the generated harness files, `.agents/generated-files.json` among them |
 | `guard_wk.py` | no | | nothing |
@@ -145,8 +147,11 @@ its folder has one, and adds the house checks:
 | `PROPERTY_MISSING` | a datapill on a project property that does not exist; a renamed property leaves its datapills on the old name |
 | `MAGIC_LITERAL` | a hardcoded Slack channel id, URL or e-mail address of the company (`company_domains` in the registry), or a match of `lint_literal_patterns`, outside a variable or config step |
 | `UNFINISHED_STEP`, `SKIPPED_STEP` | steps left unfinished or skipped |
+| `UNMASKED_CREDENTIAL` | a warning: a step without "Mask data" that carries a credential by name (rule **Sensitive data stays out of job history**). It reads the names of input fields, request headers and parameters, datapills, the output a code step declares and the parameters of a recipe function, never a value. A bare `token` is not reported, because list actions name their paging tokens that way. See [data-masking.md](../docs/conventions/data-masking.md) |
+| `PROSE_PATTERN` | only when the registry lists `lint_prose_patterns`: a recipe description, a step comment or a comment line of a code step that matches one of those patterns, for example the name of a system the recipe replaced. The message reads `the description holds <label>` |
 | `ACCOUNT_PROPERTY` | only where the project lists it under `lint_checks`: a datapill on a workspace account property instead of a project property |
 | `NO_GUARD_PROPERTY` | only where the project lists it under `lint_checks`: a recipe function that takes a parameter whose name matches the project's `lint_guard_parameter` (a regular expression, for example `(^|_)account_id$`), acts on something, and never reads the property named by `lint_guard_property`, the list of records automation must not touch. The message reads `takes '<parameter>' but never reads <property>`. A stub that only logs and returns, and the functions under `lint_guard_exempt`, are skipped |
+| `JOB_VIEW_MISSING`, `JOB_VIEW_STALE`, `JOB_VIEW_MASKED` | only where the project lists `JOB_VIEW` under `lint_checks`: the recipe has no job report (a warning); a column of its Jobs tab reads a step that is not in the recipe, or a step with data masking, which Workato blocks (errors). See [job-view.md](../docs/conventions/job-view.md) |
 
 Three lint rules misread platform-standard datapills; the script drops their known false
 positives instead of switching the rules off. Step numbers in the output are UI numbers. Run
@@ -193,14 +198,15 @@ generated; the purpose, the field descriptions and the `verified` and `personal_
 a person's and are kept, also when a table is renamed in Workato.
 
 "Used by" lists the documented recipes whose entry in the recipe index names the table. The
-index records a table only when the registry lists its id under `tables` of a project
-(`build_index.py`). An empty list reads "The recipe index names no documented recipe for this
-table." and proves nothing.
+index records a lookup table where a lookup table step holds its id, or where the registry names
+it under `tables` of a project and the recipe holds its id anywhere (`build_index.py`). An empty
+list reads "The recipe index names no documented recipe for this table." and proves nothing: a
+formula can read a table by name, and a recipe without a doc is not in the index.
 
 Exit: `0` done or up to date; `1` with `--check`, a file is out of date; `2` Workato could not be
 read.
 
-### `wk_api.py {dev,prod} METHOD PATH [-q KEY=VALUE ...] [--json TEXT | --json-file FILE] [--write]`
+### `wk_api.py {dev,prod} METHOD PATH [-q KEY=VALUE ...] [--json TEXT | --json-file FILE] [--write] [--data-tables]`
 
 One call to the developer API for what `wk` does not cover, for example:
 
@@ -215,7 +221,55 @@ never followed. A connection that breaks is reported by the kind of error, witho
 `GET /properties` must name one property with `-q prefix=<full name>`, because a property can
 hold a secret. Workato can answer HTTP 200 with `"success": false`; that counts as a failed call.
 
-Exit: `0` success; `1` the call failed; `2` the request was refused, or `wk` gave no token.
+`--data-tables` sends the call to the record API of data tables instead, which Workato serves
+from a host of its own in each data center (`data-tables` in place of the first label of the
+host; documented: <https://docs.workato.com/workato-api/data-tables.html>). Only paths under
+`/tables/` are allowed there, and a table is named by its UUID:
+
+```bash
+scripts/wk_api.py dev POST /tables/<uuid>/query --data-tables --json '{"limit": 5}'
+```
+
+A `POST` to `.../query` only reads, so it needs no `--write`; creating, changing or deleting a
+record does. What a query prints is table data: it can hold personal data, and it never goes
+into the repository. No permission rule lets these calls run without asking.
+
+Exit: `0` success; `1` the call failed; `2` the request was refused, the data tables host of the
+profile is not known, or `wk` gave no token.
+
+### `doc_sync.py {plan,stamp,status}`
+
+Tells which docs to refresh around an asset, and records when each was last compared with
+Workato (rule **Sync the docs around a recipe**).
+
+```bash
+scripts/doc_sync.py plan 3001
+```
+
+- `plan <asset> [--json] [--limit N] [--max-age-hours N]` reads every recipe of Dev with its code,
+  and the connections, once. An asset is a Dev recipe id (`3001` or `recipe:3001`),
+  `connection:<id>`, `lookup_table:<id>` or `data_table:<id>`. For a recipe it lists the recipe,
+  the recipes it calls, the recipes that call it or use one of its tables, its connections and
+  its tables; for another asset, the recipes that use it. One level only. Each row names its doc
+  and says whether it is stale: never synced, changed in Workato since the last sync (a recipe's
+  `updated_at`, a connection's name), or synced more than 24 hours ago. More assets than the
+  limit (15) is said in the output: then a person chooses what to refresh.
+- `stamp <asset> ...` records "compared now" in
+  `workato/workspaces/<workspace>/inventory/doc-sync.json`, one line per asset: for a recipe the
+  `updated_at` Workato shows, for a connection its name without the account in brackets and
+  without an e-mail address. A recipe without a doc cannot be stamped. A failed stamp writes
+  nothing. Run it only after the doc was compared with the live asset; it is not among the
+  commands a harness may run without asking.
+- `status [project]` lists every recipe doc whose stamp is missing, whose recipe changed in
+  Workato since its stamp, or whose recipe is gone from Dev. A doc with `deleted: true` in its
+  frontmatter is the record of a recipe deleted on purpose and is left out. Age alone never
+  makes a doc stale here.
+
+A table that a step names by a datapill, and a lookup table that a formula reads by name, are
+not found. Nothing is written to Workato, and no table row is read.
+
+Exit: `0` nothing is stale, or the stamps are written; `1` something is stale; `2` Workato could
+not be read, or an asset or an argument is wrong.
 
 ## Local copies and docs
 
@@ -243,8 +297,10 @@ Rebuilds the recipe index, `workato/workspaces/<workspace>/inventory/recipes-ind
 - the frontmatter of the recipe docs (`name`, `path`, `severity`, `owner`, `last_job`,
   `verdict`), and an optional sheet `inventory/recipes.json` that fills what a doc leaves empty;
 - the Dev copy in `tmp/wk/dev/` (refresh it first with `sync_recipes.py dev`): trigger, step
-  count, connectors, forward calls, `tables` (the tables the registry names under `tables` whose
-  id the recipe holds) and `properties` (the names of the project properties it reads). A
+  count, connectors, forward calls, `tables` and `properties` (the names of the project
+  properties it reads). `tables` holds the tables the registry names under `tables` whose id the
+  recipe holds anywhere, as `<name> (<id>)`, and every other table that a data table step or a
+  lookup table step names by its id, as `data table <id>` or `lookup table <id>`. A
   "Call recipe" step without a target yet is recorded with
   `recipe_id: null`;
 - the current index: the callers (`called_by`) are kept, and a key the script does not write is
@@ -271,8 +327,8 @@ between `init_workspace.py` and the first `sync_recipes.py prod`.
 ### `check.py`
 
 What `make check` and CI run: Ruff lint, Ruff format, mypy, the unit tests, `check_data.py`, the
-generated harness files (`sync_harness.py --check`), `check_links.py`, `check_secrets.py`,
-`check_kit_files.py` and the ignore rules. A failed check does not stop the ones after it. Ruff and
+generated harness files (`sync_harness.py --check`), `check_links.py`, `check_step_numbers.py`,
+`check_secrets.py`, `check_kit_files.py` and the ignore rules. A failed check does not stop the ones after it. Ruff and
 mypy come from `.venv/`; `make dev` installs them once.
 
 ```bash
@@ -291,9 +347,10 @@ printed; for a registry the field is named, never its value. Besides the structu
 - an `app_url` that is not the plain https address of a Workato web app (`app_url must be the
   https address of a Workato web app, alone`);
 - a profile name with other characters than letters, digits, `.`, `_` and `-`;
-- `lint_checks` other than `ACCOUNT_PROPERTY` and `NO_GUARD_PROPERTY`, and `NO_GUARD_PROPERTY`
-  without both `lint_guard_property` and `lint_guard_parameter`;
-- a `lint_literal_patterns` value or a `lint_guard_parameter` that is not a regular expression;
+- `lint_checks` other than `ACCOUNT_PROPERTY`, `NO_GUARD_PROPERTY` and `JOB_VIEW`, and
+  `NO_GUARD_PROPERTY` without both `lint_guard_property` and `lint_guard_parameter`;
+- a `lint_literal_patterns` value, a `lint_prose_patterns` value or a `lint_guard_parameter` that
+  is not a regular expression;
 - `tables` that does not map a table id to its name.
 
 A managed project without a Prod copy yet is a note, not a failure:
@@ -334,6 +391,23 @@ Every relative Markdown link must point to an existing file, and none may point 
 (`tmp/README.md` excepted). External links and anchors are skipped. Without arguments it checks
 every Markdown file outside `tmp/`. Exit: `0` every link resolves; `1` otherwise; `2` a file
 given as an argument does not exist.
+
+### `check_step_numbers.py [file ...]`
+
+No recipe doc may name a step by its number (rule **A recipe doc has no step numbers**): a step
+number moves whenever someone edits the recipe. Without arguments it reads every
+`docs/<project>/recipes/*.md` and reports, with the file and the line:
+
+- the word "step" followed by a number: "step 12", "Steps 4-9", "step #3";
+- a numbered list that does not count 1, 2, 3 in a row: a list that starts at 12 or jumps from 8
+  to 10 is an outline numbered by step. A list may go on under a later heading and may start
+  again at 1.
+
+A recipe name that holds such a number is ignored wherever a doc writes it out, and so is the
+target of every Markdown link. A datapill alias with a number is left to the person who writes
+the doc. Only recipe docs are read: a changelog is where step numbers belong.
+
+Exit: `0` nothing found; `1` at least one finding; `2` a file cannot be read.
 
 ### `check_secrets.py`
 

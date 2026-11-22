@@ -31,11 +31,11 @@ permissions and a guard hook:
 | Rules for agents | [AGENTS.md](AGENTS.md), one file every harness loads: named rules for writing to Workato, for the repository and for the docs, and a last section for the rules of your own workspace |
 | Skills | procedures an agent loads when a task matches: check which environment it acts in, edit a recipe, stop and start one, deploy a project to Prod, read and refresh recipe JSON, manage connections and other assets, read job history, review the impact of a change, build a connector, document a recipe; optional skills for Jira and Confluence |
 | A copy of Prod in git | `scripts/sync_recipes.py` copies the recipes of every project deployed to Prod as JSON, by plain reads; `scripts/prod_drift.py` compares the live Dev recipes with the live Prod recipes |
-| Docs | one doc per recipe from a template and an index of them; setup pages, conventions and notes on how the platform behaves |
-| Tooling | eighteen Python scripts on the standard library only: setup, reads from Workato, lint, generators and offline checks. None changes Workato unless its help says so |
+| Docs | one doc per recipe from a template and an index of them, with a record of when each doc was last compared with Workato; setup pages, conventions and notes on how the platform behaves |
+| Tooling | twenty Python scripts on the standard library only: setup, reads from Workato, lint, generators and offline checks. None changes Workato unless its help says so |
 | Guardrails | for Claude Code: an allow list of commands that only read Workato, a deny list for the package and token commands of `wk` and for the credential files, and a hook that blocks the `wk` commands the rules forbid |
 | One source for six harnesses | Claude Code, Codex, Cursor, Gemini CLI, Antigravity CLI and GitHub Copilot get their rules, MCP servers and skills from one source, and Claude Code and Codex also their subagent roles (only Claude Code was tested) |
-| Offline checks | `make check`: lint, format, types, unit tests, JSON and registry, generated harness files, links, secret patterns and a check that the kit's own files hold no workspace data. After a one-time `make dev` it needs no account and no network |
+| Offline checks | `make check`: lint, format, types, unit tests, JSON and registry, generated harness files, links, step numbers in recipe docs, secret patterns and a check that the kit's own files hold no workspace data. After a one-time `make dev` it needs no account and no network |
 
 ## How it works
 

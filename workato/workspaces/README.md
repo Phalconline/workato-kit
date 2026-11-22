@@ -45,7 +45,7 @@ fails at the end, the registry is already written).
 | `notes/` | what this workspace adds to a skill of the kit, one file per skill |
 | `projects/<slug>/` | the recipe JSON that runs in Prod, one folder per managed project |
 | `message-templates/`, `connectors/`, `lookup-tables/` | sources and descriptions of workspace-level assets |
-| `inventory/` | `recipes-index.json`, the generated recipe index; optionally `recipes.json`, a sheet kept by hand |
+| `inventory/` | `recipes-index.json`, the generated recipe index; `doc-sync.json`, the generated record of when each doc was last compared with Workato; optionally `recipes.json`, a sheet kept by hand |
 | `wklintrc.json` | optional: replaces the kit's lint configuration |
 
 The README that `init_workspace.py` puts into the folder describes each of these and who writes
